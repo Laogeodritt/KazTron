@@ -61,18 +61,23 @@ class BlotsController:
     def __init__(self,
                  server: discord.Server,
                  config: KaztronConfig,
-                 milestone_map: Dict[ProjectType, Dict[discord.Role, str]]):
+                 milestone_map: Dict[ProjectType, Dict[discord.Role, int]]):
         self.server = server
         self.config = config
         self.session = Session()
         self.checkin_weekday = self.config.get('blots', 'check_in_weekday')
         self.checkin_time = dt_parse(self.config.get('blots', 'check_in_time')).time()
         # this is ordered in decreasing order of minimum
-        # noinspection PyTypeChecker
-        self.milestone_map = {p: OrderedDict(
-            sorted(type_map.items(), key=lambda i: i[1], reverse=True)
-        ) for p, type_map in milestone_map.items()}  \
-            # type: Dict[ProjectType, Dict[discord.Role, str]]
+        self.milestone_map = {}  # type: Dict[ProjectType, Dict[discord.Role, int]]
+        for p, inner_map in milestone_map.items():
+            # noinspection PyTypeChecker
+            self.milestone_map[p] = OrderedDict(
+                sorted(inner_map.items(), key=lambda i: i[1], reverse=True))
+            logger.info("Milestone map for {}: {{{}}}".format(
+                p.name,
+                ', '.join(['{0.name}: {1:d}'
+                           .format(r, v) for r, v in self.milestone_map[p].items()])
+            ))
 
     @on_error_rollback
     def get_user(self, member: discord.Member):
@@ -216,11 +221,13 @@ class BlotsController:
         role_intersect = set(self.milestone_map[p_type].keys()) & set(member.roles)
         return list(role_intersect)
 
-    def get_milestone_roles(self) -> AbstractSet[discord.Role]:
+    def get_milestone_roles(self) -> List[discord.Role]:
         """ Get a set of all milestone roles. """
-        ms_roles = set()
+        ms_roles = []
         for p_type in ProjectType:
-            ms_roles |= set(self.milestone_map[p_type].keys())
+            for role in self.milestone_map[p_type].keys():
+                if role not in ms_roles:
+                    ms_roles.append(role)
         return ms_roles
 
     def find_target_milestone(self, check_in: CheckIn) -> discord.Role:
@@ -230,7 +237,7 @@ class BlotsController:
         """
         ms_map = self.milestone_map[check_in.project_type]
         for role, v in ms_map.items():
-            if v > check_in.word_count:
+            if check_in.word_count >= v:
                 return role
         raise KeyError("No milestone role for check_in: {!r} user: {!r}"
             .format(check_in, check_in.user))

@@ -210,7 +210,7 @@ class CheckInManager(KazCog):
             paginator = Pagination(db_records, self.ITEMS_PER_PAGE, align_end=True)
             if page is not None:
                 paginator.page = max(0, min(paginator.total_pages - 1, page-1))
-            await self.send_check_in_list(ctx.message.channel, paginator, ctx.message.author)
+            await self.send_check_in_list(ctx.message.channel, paginator, member)
         except orm.exc.NoResultFound:
             await self.bot.say("{} has not checked in yet.".format(member.mention))
 
@@ -247,13 +247,13 @@ class CheckInManager(KazCog):
         users_not_checked_in = [m.mention for m, c in report.items() if c is None]
 
         checked_in_str = "**CHECKED IN**\n{}"\
-            .format(', '.join(users_checked_in))
+            .format('\n'.join(users_checked_in))
         if len(checked_in_str) > Limits.MESSAGE:  # if too long for one message, summarize
             checked_in_str = "**CHECKED IN**\n{:d} users (list too long)"\
                 .format(len(users_checked_in))
 
         no_check_in_str = "**DID NOT CHECK IN**\n{}" \
-            .format(', '.join(users_not_checked_in))  # don't summarize: may need action
+            .format('\n'.join(users_not_checked_in))  # don't summarize: may need action
 
         await self.bot.say("**Check-In Report for {}**".format(week_str))
         for msg in split_chunks_on(checked_in_str, Limits.MESSAGE):

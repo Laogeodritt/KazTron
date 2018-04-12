@@ -14,6 +14,9 @@ from sqlalchemy.ext.declarative import declarative_base  # DON'T REMOVE THIS - i
 # noinspection PyProtectedMember
 from sqlalchemy.engine import Engine
 
+# noinspection PyUnresolvedReferences
+from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
+
 
 def make_sqlite_engine(filename):
     """

@@ -2,7 +2,7 @@ import logging
 from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import List, Tuple, Dict, Optional, Union, AbstractSet, Sequence, Mapping, \
-    MutableMapping
+    MutableMapping, Iterable
 
 import discord
 from discord.ext import commands
@@ -21,12 +21,14 @@ db_file = 'blots.sqlite'
 
 engine = None
 Session = db.sessionmaker()
+session = None
 
 
 def init_db():
-    global engine
+    global engine, session
     engine = db.make_sqlite_engine(db_file)
     Session.configure(bind=engine)
+    session = Session()
     Base.metadata.create_all(engine)
 
 
@@ -58,17 +60,19 @@ class BlotsController:
     :param milestone_map: Role mappings for each project type. The role mappings map the
         {MINIMUM wordcount value: corresponding role}.
     """
-    def __init__(self,
-                 server: discord.Server,
-                 config: KaztronConfig,
+    def __init__(self, server: discord.Server, config: KaztronConfig,
                  milestone_map: Dict[ProjectType, Dict[discord.Role, int]]):
         self.server = server
         self.config = config
-        self.session = Session()
+        self.session = session
         self.checkin_weekday = self.config.get('blots', 'check_in_weekday')
         self.checkin_time = dt_parse(self.config.get('blots', 'check_in_time')).time()
         # this is ordered in decreasing order of minimum
         self.milestone_map = {}  # type: Dict[ProjectType, Dict[discord.Role, int]]
+
+        if self.session is None:
+            raise RuntimeError("no database session: init_db() not yet called?")
+
         for p, inner_map in milestone_map.items():
             # noinspection PyTypeChecker
             self.milestone_map[p] = OrderedDict(
@@ -102,9 +106,17 @@ class BlotsController:
         """
         Get the start and end times for a check-in week that includes the passed date.
         """
-        end = get_weekday(included_date, self.checkin_weekday, future=True).date()
-        start = end - timedelta(days=7)
-        return datetime.combine(start, self.checkin_time), datetime.combine(end, self.checkin_time)
+        end_date = get_weekday(included_date, self.checkin_weekday, future=True).date()
+        start_date = end_date - timedelta(days=7)
+
+        end_dt = datetime.combine(end_date, self.checkin_time)
+        start_dt = datetime.combine(start_date, self.checkin_time)
+
+        if included_date > end_dt:  # for the day-of, check if the time has already passed
+            end_dt += timedelta(days=7)
+            start_dt += timedelta(days=7)
+
+        return start_dt, end_dt
 
     def query_check_ins(self, *,
                         member: discord.Member=None,
@@ -115,7 +127,7 @@ class BlotsController:
         :param member: If given, filter by this user.
         :param included_date: If given, query only for the check-in week that includes this date.
         :return: List of check-ins in chronological order.
-        :raise orm.exc.NoResultFound: no results found
+        :raise db.NoResultFound: no results found
         """
         log_conds = []
         query = self.session.query(CheckIn)
@@ -133,7 +145,7 @@ class BlotsController:
         try:
             results[0]
         except IndexError:
-            raise orm.exc.NoResultFound
+            raise db.NoResultFound
 
         logger.info("query_check_ins: Found {:d} records for {}"
             .format(len(results), ' and '.join(log_conds)))
@@ -260,7 +272,7 @@ class BlotsController:
         user = self.get_user(member)
         check_in = CheckIn(timestamp=timestamp, user_id=user.user_id, word_count=word_count,
             project_type=user.project_type, message=message[:CheckIn.MAX_MESSAGE_LEN])
-        logger.debug("save_checkin: {!r}".format(CheckIn))
+        logger.debug("save_checkin: {!r}".format(check_in))
         self.session.add(check_in)
         self.session.commit()
         return check_in

@@ -89,6 +89,7 @@ class CheckInManager(KazCog):
 
             # end of iteration updates
             total_len += cur_len
+            total_fields += 1
 
         em.set_footer(text=footer_text)
         await self.bot.send_message(dest, embed=em)
@@ -155,7 +156,7 @@ class CheckInManager(KazCog):
                 project_type_e = model.ProjectType[project_type]
             except KeyError:
                 raise commands.BadArgument("Invalid project_type {!r} (must be one of {})"
-                    .format(project_type, ', '.format([e for e in model.ProjectType.__members__])))
+                    .format(project_type, ', '.join([e for e in model.ProjectType.__members__])))
             self.c.set_user_type(ctx.message.author, project_type_e)
             await self.bot.say("{} Your project type has been changed to {}"
                 .format(ctx.message.author.mention, project_type_e.name))
@@ -176,7 +177,7 @@ class CheckInManager(KazCog):
 
         Examples:
             .checkin list - List all your check-ins (last page if multiple pages)..
-            .quote list 4 - List the 4th page of check-ins
+            .checkin list 4 - List the 4th page of check-ins
         """
         logger.info("checkin list: {}".format(message_log_str(ctx.message)))
         try:

@@ -10,7 +10,8 @@ from kaztron import KazCog
 from kaztron.driver.pagination import Pagination
 from kaztron.theme import solarized
 from kaztron.utils.checks import mod_only, mod_channels, in_channels
-from kaztron.utils.converter import MemberConverter2, NaturalDateConverter, BooleanConverter
+from kaztron.utils.converter import MemberConverter2, NaturalDateConverter, BooleanConverter, \
+    NaturalInteger
 from kaztron.utils.discord import Limits, get_group_help, user_mention, get_named_role
 from kaztron.utils.logging import message_log_str
 from kaztron.utils.datetime import format_datetime, format_date
@@ -96,7 +97,7 @@ class CheckInManager(KazCog):
 
     @commands.group(name="checkin", pass_context=True, invoke_without_command=True)
     @in_channels([check_in_channel_id])
-    async def check_in(self, ctx: commands.Context, word_count: int, *, message: str):
+    async def check_in(self, ctx: commands.Context, word_count: NaturalInteger, *, message: str):
         """
         BLOTS weekly check-in. Enter your TOTAL word (or page) count and a brief update message.
 
@@ -113,6 +114,7 @@ class CheckInManager(KazCog):
                 fallout of the Potato Battle of 1912.
         """
         logger.debug("check_in: {}".format(message_log_str(ctx.message)))
+        word_count = word_count  # type: int  # for IDE type checking
         if word_count < 0:
             raise commands.BadArgument("word_count must be greater than 0.")
         if not message:

@@ -120,7 +120,7 @@ class CheckInManager(KazCog):
         if not message:
             raise commands.BadArgument("Check-in message is required.")
 
-        self.c.save_check_in(
+        check_in = self.c.save_check_in(
             member=ctx.message.author,
             word_count=word_count,
             message=message,
@@ -128,8 +128,10 @@ class CheckInManager(KazCog):
         )
         start, end = self.c.get_check_in_week(ctx.message.timestamp)
         await self.bot.say(
-            "{} Check-in recorded for the week of {} to {}. Thanks!"
-            .format(ctx.message.author.mention, format_date(start), format_date(end))
+            "{} Check-in for {:d} {} recorded for the week of {} to {}. Thanks!".format(
+                ctx.message.author.mention,
+                check_in.word_count, self.PROJECT_UNIT_MAP[check_in.project_type],
+                format_date(start), format_date(end))
         )
 
     @check_in.command(name="type", pass_context=True, ignore_extra=False)

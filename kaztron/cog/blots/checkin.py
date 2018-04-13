@@ -98,14 +98,15 @@ class CheckInManager(KazCog):
     @in_channels([check_in_channel_id])
     async def check_in(self, ctx: commands.Context, word_count: int, *, message: str):
         """
-        BLOTS check-in.
+        BLOTS weekly check-in. Enter your TOTAL word (or page) count and a brief update message.
 
-        If your project type is "words", enter your word_count in words. If your project type is
-        "visual" or "script", enter your word_count in pages. See also `.help checkin type`.
+        If your project type is "words", enter your word_count in words (total). If your project
+        type is "visual" or "script", enter your total number of pages instead. See also
+        `.help checkin type`.
 
         Arguments:
-        * word_count: Required. Your word count (can be other units depending on project type).
-        * numessage: Required. Your progress update. Maximum length 1000 characters.
+        * word_count: Required. Your total word count (or total pages, depending on project type).
+        * message: Required. Your progress update. Maximum length 1000 characters.
 
         Examples:
             .checkin 304882 Finished chapter 82 and developed some of the social and economic

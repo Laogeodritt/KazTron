@@ -48,8 +48,9 @@ class CheckIn(Base):
 
     def __repr__(self):
         return "<CheckIn(id={:d}, timestamp={}, user_id={}, word_count={}, message={})>" \
-            .format(self.id, self.timestamp.isoformat(' '), self.user_id, self.word_count,
-                    self.message[:97] + '...' if len(self.message) > 100 else self.message)
+            .format(self.id if self.id is not None else -1,
+                    self.timestamp.isoformat(' '), self.user_id, self.word_count,
+                    (self.message[:97] + '...') if len(self.message) > 100 else self.message)
 
     def __str__(self):
         raise NotImplementedError()

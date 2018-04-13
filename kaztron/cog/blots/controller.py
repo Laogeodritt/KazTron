@@ -272,8 +272,8 @@ class BlotsController:
         user = self.get_user(member)
         check_in = CheckIn(timestamp=timestamp, user_id=user.user_id, word_count=word_count,
             project_type=user.project_type, message=message[:CheckIn.MAX_MESSAGE_LEN])
-        logger.debug("save_checkin: {!r}".format(check_in))
         self.session.add(check_in)
+        logger.debug("save_checkin: {!r}".format(check_in))
         self.session.commit()
         return check_in
 

@@ -54,34 +54,13 @@ class MilestoneInfo:
 
 
 class BlotsController:
-    """
-    :param server: Discord server that the bot/BLOTS module is to manage.
-    :param config: System-wide KazTron config (not the state.json)
-    :param milestone_map: Role mappings for each project type. The role mappings map the
-        {MINIMUM wordcount value: corresponding role}.
-    """
-    def __init__(self, server: discord.Server, config: KaztronConfig,
-                 milestone_map: Dict[ProjectType, Dict[discord.Role, int]]):
+    def __init__(self, server: discord.Server, config: KaztronConfig):
         self.server = server
         self.config = config
         self.session = session
-        self.checkin_weekday = self.config.get('blots', 'check_in_weekday')
-        self.checkin_time = dt_parse(self.config.get('blots', 'check_in_time')).time()
-        # this is ordered in decreasing order of minimum
-        self.milestone_map = {}  # type: Dict[ProjectType, Dict[discord.Role, int]]
 
         if self.session is None:
             raise RuntimeError("no database session: init_db() not yet called?")
-
-        for p, inner_map in milestone_map.items():
-            # noinspection PyTypeChecker
-            self.milestone_map[p] = OrderedDict(
-                sorted(inner_map.items(), key=lambda i: i[1], reverse=True))
-            logger.info("Milestone map for {}: {{{}}}".format(
-                p.name,
-                ', '.join(['{0.name}: {1:d}'
-                           .format(r, v) for r, v in self.milestone_map[p].items()])
-            ))
 
     @on_error_rollback
     def get_user(self, member: discord.Member):
@@ -98,6 +77,33 @@ class BlotsController:
             self.session.add(user)
             self.session.commit()
             return user
+
+
+class CheckInController(BlotsController):
+    """
+    :param server: Discord server that the bot/BLOTS module is to manage.
+    :param config: System-wide KazTron config (not the state.json)
+    :param milestone_map: Role mappings for each project type. The role mappings map the
+        {MINIMUM wordcount value: corresponding role}.
+    """
+    def __init__(self, server: discord.Server, config: KaztronConfig,
+                 milestone_map: Dict[ProjectType, Dict[discord.Role, int]]):
+        super().__init__(server, config)
+        self.checkin_weekday = self.config.get('blots', 'check_in_weekday')
+        self.checkin_time = dt_parse(self.config.get('blots', 'check_in_time')).time()
+
+        self.milestone_map = {}  # type: Dict[ProjectType, Dict[discord.Role, int]]
+
+        for p, inner_map in milestone_map.items():
+            # sorted by minimum wordcount value (descending)
+            # noinspection PyTypeChecker
+            self.milestone_map[p] = OrderedDict(
+                sorted(inner_map.items(), key=lambda i: i[1], reverse=True))
+            logger.info("Milestone map for {}: {{{}}}".format(
+                p.name,
+                ', '.join(['{0.name}: {1:d}'
+                           .format(r, v) for r, v in self.milestone_map[p].items()])
+            ))
 
     def get_exempt_users(self):
         return self.session.query(User).filter_by(is_exempt=True).all()
@@ -151,7 +157,7 @@ class BlotsController:
             .format(len(results), ' and '.join(log_conds)))
         return results
 
-    def query_latest_check_ins(self) -> Dict[User, CheckIn]:
+    def query_latest_check_ins(self) -> Dict[discord.Member, CheckIn]:
         results = self.session \
             .query(CheckIn, db.func.max(CheckIn.timestamp).label('timestamp_max')) \
             .group_by(CheckIn.user_id) \
@@ -289,3 +295,85 @@ class BlotsController:
             .format(member.name, "exempt" if is_exempt else "not exempt"))
         self.get_user(member).is_exempt = is_exempt
         self.session.commit()
+
+
+class BlotsBadgeController(BlotsController):
+    """
+    :param server: Discord server that the bot/BLOTS module is to manage.
+    :param config: System-wide KazTron config (not the state.json)
+    """
+
+    def __init__(self, server: discord.Server, config: KaztronConfig):
+        super().__init__(server, config)
+
+    def query_badges(self, *, member: discord.Member):
+        """ Query a user's badges. """
+        results = self.session.query(Badge).join(User, User.user_id == Badge.user_id) \
+            .filter(User.discord_id == member.id) \
+            .order_by(Badge.timestamp).all()
+
+        try:
+            results[0]
+        except IndexError:
+            raise db.NoResultFound
+
+        logger.info("query_badges: Found {:d} records for member {}".format(len(results), member))
+        return results
+
+    def query_badge_from_message(self, message: discord.Message) -> Optional[Badge]:
+        """
+        Check if a badge already exists from a given Discord message.
+        """
+        return self.session.query(Badge).filter_by(message_id=message.id).one_or_none()
+
+    def query_badge_report(self, min_badges: int) -> Iterable[Tuple[User, int]]:
+        """ Get a summary of number of badges per user (in descending order). """
+        total = db.func.count(Badge.id).label('total')
+        return self.session.query(User, total).having(total >= min_badges)\
+            .filter(User.user_id == Badge.user_id)\
+            .group_by(Badge.user_id).order_by(db.desc(total)).all()
+
+    @on_error_rollback
+    def save_badge(self, *,
+                   message_id: str,
+                   member: discord.Member,
+                   from_member: discord.Member,
+                   badge: BadgeType,
+                   reason: str,
+                   timestamp: datetime):
+        if len(reason) > Badge.MAX_MESSAGE_LEN:
+            raise commands.BadArgument(
+                "Reason too long (max {:d} chars)".format(CheckIn.MAX_MESSAGE_LEN))
+
+        # noinspection PyTypeChecker
+        badge_row = self.query_badge_from_message(discord.Object(id=message_id))
+        user = self.get_user(member)
+        from_user = self.get_user(from_member)
+
+        if not badge_row:
+            logger.info("save_badge: Inserting badge...")
+            badge_row = Badge(
+                message_id=message_id, timestamp=timestamp,
+                user_id=user.user_id, from_id=from_user.user_id,
+                badge=badge, reason=reason[:CheckIn.MAX_MESSAGE_LEN]
+            )
+            logger.debug("save_badge: {!r}".format(badge_row))
+            self.session.add(badge_row)
+        else:
+            logger.info("save_badge: Updating existing badge...")
+            logger.debug("replace_badge: before={!r}".format(badge_row))
+            badge_row.user = user
+            badge_row.badge = badge
+            badge_row.reason = reason
+            logger.debug("replace_badge: after={!r}".format(badge_row))
+        self.session.commit()
+        return badge_row
+
+    @on_error_rollback
+    def delete_badge(self, message_id: str):
+        # noinspection PyTypeChecker
+        badge_row = self.query_badge_from_message(discord.Object(id=message_id))
+        logger.info("delete_badge: Deleting row: {!r}".format(badge_row))
+        self.session.delete(badge_row)
+        self.session.commit()
+        return badge_row

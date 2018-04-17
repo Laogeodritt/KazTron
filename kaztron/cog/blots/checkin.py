@@ -17,7 +17,7 @@ from kaztron.utils.logging import message_log_str
 from kaztron.utils.datetime import format_datetime, format_date
 
 from kaztron.cog.blots import model
-from kaztron.cog.blots.controller import BlotsController, MilestoneInfo
+from kaztron.cog.blots.controller import CheckInController, MilestoneInfo
 from kaztron.utils.strings import split_chunks_on
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ class CheckInManager(KazCog):
 
     def __init__(self, bot):
         super().__init__(bot)
-        self.c = None  # type: BlotsController
+        self.c = None  # type: CheckInController
 
     async def on_ready(self):
         await super().on_ready()
@@ -46,7 +46,7 @@ class CheckInManager(KazCog):
             for pt, ms_map in self.config.get('blots', 'milestone_map').items():
                 milestone_map[model.ProjectType[pt]] = {get_named_role(self.server, r): v
                                                         for r, v in ms_map.items()}
-            self.c = BlotsController(self.server, self.config, milestone_map)
+            self.c = CheckInController(self.server, self.config, milestone_map)
         except Exception:
             self.core.set_cog_shutdown(self)
             raise
@@ -192,7 +192,7 @@ class CheckInManager(KazCog):
                 paginator.page = max(0, min(paginator.total_pages - 1, page-1))
             await self.send_check_in_list(ctx.message.author, paginator, ctx.message.author)
         except orm.exc.NoResultFound:
-            await self.bot.say("You haven't checked in yet!")
+            await self.bot.say("{} You haven't checked in yet!".format(ctx.message.author.mention))
 
     @check_in.command(name='query', pass_context=True, ignore_extra=False)
     @mod_only()
@@ -249,8 +249,19 @@ class CheckInManager(KazCog):
             await self.bot.say("No check-ins for {}.".format(week_str))
             return
 
-        users_checked_in = [m.mention for m, c in report.items() if c]
-        users_not_checked_in = [m.mention for m, c in report.items() if c is None]
+        users_checked_in = ["{0} ({1})".format(m.mention, format_datetime(c.timestamp))
+                            for m, c in report.items() if c]
+        users_not_checked_in = []
+        if None in report.values():
+            latest_check_ins = self.c.query_latest_check_ins()
+            for m, c in report.items():
+                if c is None:
+                    try:
+                        last_check_in = latest_check_ins[m]
+                        date_str = format_date(last_check_in.timestamp)
+                    except KeyError:
+                        date_str = 'Never'
+                    users_not_checked_in.append("{0} (last: {1})".format(m.mention, date_str))
 
         checked_in_str = "**CHECKED IN**\n{}"\
             .format('\n'.join(users_checked_in))

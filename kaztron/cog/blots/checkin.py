@@ -13,6 +13,7 @@ from kaztron.utils.checks import mod_only, mod_channels, in_channels
 from kaztron.utils.converter import MemberConverter2, NaturalDateConverter, BooleanConverter, \
     NaturalInteger
 from kaztron.utils.discord import Limits, get_group_help, user_mention, get_named_role
+from kaztron.utils.embeds import EmbedSplitter
 from kaztron.utils.logging import message_log_str
 from kaztron.utils.datetime import format_datetime, format_date
 
@@ -55,16 +56,16 @@ class CheckInManager(KazCog):
                                dest: discord.Channel,
                                check_ins: Pagination,
                                member: discord.Member):
-        title = "Check-ins for {}".format(member.nick or member.name)
-        footer_text = "Page {:d}/{:d}".format(check_ins.page + 1, check_ins.total_pages)
-        base_len = len(title) + len(footer_text)
 
-        em = discord.Embed(title=title, color=self.EMBED_COLOR)
+        es = EmbedSplitter(
+            auto_truncate=True,
+            title="Check-in list",
+            description=member.mention,
+            colour=self.EMBED_COLOR
+        )
+        es.set_footer(text="Page {:d}/{:d}".format(check_ins.page + 1, check_ins.total_pages))
 
-        total_fields = 1  # 'User' field
-        total_len = base_len
         for check_in in check_ins:  # type: model.CheckIn
-            # Format strings for this quote
             f_name = format_datetime(check_in.timestamp)
             f_message = '{}\n*{:d} {}* – {}\n\\_\\_\\_'.format(
                 member.mention,
@@ -72,28 +73,10 @@ class CheckInManager(KazCog):
                 self.PROJECT_UNIT_MAP[check_in.project_type],
                 check_in.message
             )
-            cur_len = len(f_name) + len(f_message)
+            es.add_field(name=f_name, value=f_message, inline=False)
 
-            # check lengths and number of fields
-            too_many_fields = total_fields + 1 > Limits.EMBED_FIELD_NUM
-            embed_too_long = total_len + cur_len > int(0.95 * Limits.EMBED_TOTAL)
-
-            # if we can't fit this quote in this embed, send it and start a new one
-            if too_many_fields or embed_too_long:
-                await self.bot.send_message(dest, embed=em)
-                em = discord.Embed(title=title, color=self.EMBED_COLOR)
-                total_len = base_len
-                total_fields = 0
-
-            # add the field for the current quote
-            em.add_field(name=f_name, value=f_message, inline=False)
-
-            # end of iteration updates
-            total_len += cur_len
-            total_fields += 1
-
-        em.set_footer(text=footer_text)
-        await self.bot.send_message(dest, embed=em)
+        for em in es.finalize():
+            await self.bot.send_message(dest, embed=em)
 
     @commands.group(name="checkin", pass_context=True, invoke_without_command=True)
     @in_channels([check_in_channel_id])

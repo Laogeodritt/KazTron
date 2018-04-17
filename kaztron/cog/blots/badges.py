@@ -59,6 +59,12 @@ class BadgeManager(KazCog):
                 await self.bot.send_message(self.channel,
                     "**Error**: Badges must mention exactly 1 user.")
             return
+        elif message.mentions[0] == message.author:
+            logger.warning("Cannot give badge to self")
+            if not suppress_errors:
+                await self.bot.send_message(self.channel,
+                "**Error**: You can't give yourself a badge!")
+            return
 
         # Validation: badge type
         if len(badges) != 1:

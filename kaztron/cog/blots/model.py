@@ -24,7 +24,6 @@ class BadgeType(Enum):
     Community = 7
 
     def __init__(self, *args, **kwargs):
-        super().__init__()
         self._pattern = re.compile('<:{}:\d+>'.format(self.name), re.I)
 
     def __str__(self):

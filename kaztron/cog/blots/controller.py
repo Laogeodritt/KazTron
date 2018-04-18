@@ -373,7 +373,10 @@ class BlotsBadgeController(BlotsController):
     def delete_badge(self, message_id: str):
         # noinspection PyTypeChecker
         badge_row = self.query_badge_from_message(discord.Object(id=message_id))
-        logger.info("delete_badge: Deleting row: {!r}".format(badge_row))
-        self.session.delete(badge_row)
-        self.session.commit()
+        if badge_row:
+            logger.info("delete_badge: Deleting row: {!r}".format(badge_row))
+            self.session.delete(badge_row)
+            self.session.commit()
+        else:
+            logger.warning("delete_badge: no badge found for message_id {}".format(message_id))
         return badge_row

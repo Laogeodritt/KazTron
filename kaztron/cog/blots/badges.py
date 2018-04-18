@@ -114,12 +114,13 @@ class BadgeManager(KazCog):
         logger.info("Detected message in badge channel (#{})".format(self.channel.name))
         logger.debug("Badge Manager: {}".format(message_log_str(message)))
         badge_row = await self.add_badge(message)
-        await self.bot.send_message(self.channel,
-            "Congratulations, {1.mention}! {0.mention} just gave you the {2} badge!".format(
-                message.author,
-                self.server.get_member(badge_row.user.discord_id),
-                self._get_badge(badge_row.badge))
-        )
+        if badge_row:
+            await self.bot.send_message(self.channel,
+                "Congratulations, {1.mention}! {0.mention} just gave you the {2} badge!".format(
+                    message.author,
+                    self.server.get_member(badge_row.user.discord_id),
+                    self._get_badge(badge_row.badge))
+            )
 
     @ready_only
     async def on_message_edit(self, before: discord.Message, after: discord.Message):
@@ -132,12 +133,13 @@ class BadgeManager(KazCog):
         logger.info("Detected edited message in badge channel (#{})".format(self.channel.name))
         logger.debug("Badge Manager: {}".format(message_log_str(after)))
         badge_row = await self.add_badge(after)
-        await self.bot.send_message(self.channel,
-            "{0.mention} Your {2} badge to {1.mention} has been updated.".format(
-                after.author,
-                self.server.get_member(badge_row.user.discord_id),
-                self._get_badge(badge_row.badge))
-        )
+        if badge_row:
+            await self.bot.send_message(self.channel,
+                "{0.mention} Your {2} badge to {1.mention} has been updated.".format(
+                    after.author,
+                    self.server.get_member(badge_row.user.discord_id),
+                    self._get_badge(badge_row.badge))
+            )
 
     @ready_only
     async def on_message_delete(self, message: discord.Message):
@@ -150,12 +152,13 @@ class BadgeManager(KazCog):
         logger.info("Detected deleted message in badge channel (#{})".format(self.channel.name))
         logger.debug("Badge Manager: {}".format(message_log_str(message)))
         badge_row = self.c.delete_badge(message.id)
-        await self.bot.send_message(self.channel,
-            "{0.mention} Your {2} badge to {1.mention} has been deleted.".format(
-                message.author,
-                self.server.get_member(badge_row.user.discord_id),
-                self._get_badge(badge_row.badge))
-        )
+        if badge_row:
+            await self.bot.send_message(self.channel,
+                "{0.mention} Your {2} badge to {1.mention} has been deleted.".format(
+                    message.author,
+                    self.server.get_member(badge_row.user.discord_id),
+                    self._get_badge(badge_row.badge))
+            )
 
     @staticmethod
     def _parse_badge_reason(text: str):

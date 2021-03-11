@@ -162,7 +162,7 @@ def format_timedelta(delta: timedelta, timespec="seconds") -> str:
 def format_timestamp(dt: Union[discord.Message, datetime]) -> str:
     """ Get the timestamp string of a message to second precision, with 'UTC' timezone string. """
     if isinstance(dt, discord.Message):
-        dt = dt.timestamp
+        dt = dt.created_at
     return format_datetime(dt, seconds=True) + ' UTC'
 
 

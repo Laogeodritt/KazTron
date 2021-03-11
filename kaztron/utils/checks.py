@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import List, Union, Iterable
 
+import discord
 from discord.ext import commands
 
 from kaztron.config import get_kaztron_config
@@ -96,15 +97,15 @@ def admin_only():
     return commands.check(check_admin_wrapper)
 
 
-def in_channels(channel_id_list: List[str], allow_pm=False, delete_on_fail=False, *,
+def in_channels(channel_id_list: List[int], allow_pm=False, delete_on_fail=False, *,
                 check_id=CheckId.C_LIST):
     """
     Command check decorator. Only allow this command to be run in specific channels (passed as a
     list of channel ID strings).
     """
     def predicate(ctx: commands.Context):
-        pm_exemption = allow_pm and ctx.message.channel.is_private
-        if ctx.message.channel.id in channel_id_list or pm_exemption:
+        pm_exemption = allow_pm and isinstance(ctx.channel, discord.abc.PrivateChannel)
+        if ctx.channel.id in channel_id_list or pm_exemption:
             logger.info(
                 "Validated command in allowed channel {!s}".format(ctx.message.channel)
             )
@@ -183,7 +184,7 @@ def pm_only(delete_on_fail=False):
     Command check decorator. Only allow this command in PMs.
     """
     def predicate(ctx: commands.Context):
-        if ctx.message.channel.is_private:
+        if isinstance(ctx.channel, discord.abc.PrivateChannel):
             return True
         else:
             if not delete_on_fail:

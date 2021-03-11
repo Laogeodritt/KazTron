@@ -22,7 +22,7 @@ class ConfirmData:
         return o
 
     def __init__(self):
-        self.user_id = None  # type: str
+        self.user_id = None  # type: int
         self.timestamp = None  # type: datetime
         self.data = None  # type: Any
 
@@ -60,7 +60,7 @@ class ConfirmManager:
 
     def __init__(self, timeout: int=None):
         self.timeout = timedelta(seconds=timeout) if timeout is not None else None
-        self.user_map = {}  # type: Dict[str, ConfirmData]
+        self.user_map = {}  # type: Dict[int, ConfirmData]
 
     def has_request(self, user: discord.Member):
         """ Check if a user has an outstanding request. """
@@ -79,7 +79,7 @@ class ConfirmManager:
         if not self.has_request(ctx.message.author):
             d = ConfirmData()
             d.user_id = ctx.message.author.id
-            d.timestamp = ctx.message.timestamp
+            d.timestamp = ctx.message.created_at
             d.data = data
             self.user_map[ctx.message.author.id] = d
         else:

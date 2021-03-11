@@ -18,6 +18,10 @@ class EmbedSplitter:
     :cls:`discord.Embed` instance :attr:`~.truncate`. You should not write properties to it
     (use this class's `set_*` methods or the constructor for that).
 
+    Portions of this class (particularly docstrings) are based on discord.py's Embed implementation:
+    https://github.com/Rapptz/discord.py. These portions are copyright (c) 2015-2016 Rapptz,
+    distributed under the MIT Licence.
+
     :param auto_truncate: If True, automatically truncate title, description, etc. fields. If not,
         raise a ValueError if a value exceeds the limit.
     :raise ValueError: a text value is too long
@@ -38,12 +42,12 @@ class EmbedSplitter:
         self.repeat_image = repeat_image
         self.cur_num_fields = 0
 
-        if title is not EmptyEmbed and len(title) > Limits.EMBED_TITLE:
+        if title and len(title) > Limits.EMBED_TITLE:
             if not self.auto_truncate:
                 raise ValueError("Title too long")
             title = natural_truncate(title, maxlen=Limits.EMBED_TITLE)
 
-        if description is not EmptyEmbed and len(description) > Limits.EMBED_DESC:
+        if description and len(description) > Limits.EMBED_DESC:
             if not self.auto_truncate:
                 raise ValueError("Description too long")
             description = natural_truncate(description, maxlen=Limits.EMBED_DESC)
@@ -61,25 +65,69 @@ class EmbedSplitter:
     def cur_embed(self, v):
         self._cur_embed = v
 
-    def set_author(self, *, name: str, url: str=EmptyEmbed, icon_url: str=EmptyEmbed):
+    def set_author(self, *, name: str, url: str = EmptyEmbed, icon_url: str = EmptyEmbed):
+        """
+        Sets the author for the embed content.
+
+        This function returns the class instance to allow for fluent-style chaining.
+
+        :param name: The name of the author
+        :param url:  The URL for the author.
+        :param icon_url: The URL of the author icon. Only HTTP(S) is supported.
+        """
         if len(name) > Limits.EMBED_AUTHOR:
             if not self.auto_truncate:
                 raise ValueError("Author too long")
             name = natural_truncate(name, maxlen=Limits.EMBED_AUTHOR)
         self.template.set_author(name=name, url=url, icon_url=icon_url)
+        return self
 
-    def set_footer(self, *, text: str=EmptyEmbed, icon_url: str=EmptyEmbed):
+    def remove_author(self):
+        """
+        Clears embed’s author information.
+
+        This function returns the class instance to allow for fluent-style chaining.
+        """
+        self.template.remove_author()
+        return self
+
+    def set_footer(self, *, text: str = EmptyEmbed, icon_url: str = EmptyEmbed):
+        """
+        Sets the footer for the embed content.
+
+        This function returns the class instance to allow for fluent-style chaining.
+
+        :param text: The footer text.
+        :param icon_url: The URL of the footer icon. Only HTTP(S) is supported.
+        """
         if len(text) > Limits.EMBED_FOOTER:
             if not self.auto_truncate:
                 raise ValueError("Footer too long")
             text = natural_truncate(text, maxlen=Limits.EMBED_FOOTER)
         self.template.set_footer(text=text, icon_url=icon_url)
+        return self
 
     def set_image(self, *, url: str):
+        """
+        Sets the image for the embed content. Passing `Empty` removes the image.
+
+        This function returns the class instance to allow for fluent-style chaining.
+
+        :param url: The source URL for the image. Only HTTP(S) is supported.
+        """
         self.template.set_image(url=url)
+        return self
 
     def set_thumbnail(self, *, url: str):
+        """
+        Sets the thumbnail for the embed content. Passing `Empty` removes the thumbnail.
+
+        This function returns the class instance to allow for fluent-style chaining.
+
+        :param url:  The source URL for the thumbnail. Only HTTP(S) is supported.
+        """
         self.template.set_thumbnail(url=url)
+        return self
 
     def add_field(self, *, name, value, inline=True):
         """
@@ -93,6 +141,7 @@ class EmbedSplitter:
         """
         self.add_field_no_break(name=name, value=value, inline=inline)
         self._flush_field_cache()
+        return self
 
     def add_field_no_break(self, *, name, value, inline=True):
         """
@@ -128,9 +177,13 @@ class EmbedSplitter:
             pass
 
         # if the current field cache does not fit, make new embed
-        # cache is not flushed into the embed, so this will keep currently cached fields together
-        if self._is_too_long(cur_len) or self._num_fields() > Limits.EMBED_FIELD_NUM:
+        # cache is not flushed to cur_embed, so currently cached fields will be put in the new embed
+        is_too_long = len(self.cur_embed) + cur_len > Limits.EMBED_TOTAL
+        has_too_many_fields = self._num_fields() > Limits.EMBED_FIELD_NUM
+        if is_too_long or has_too_many_fields:
             self._start_new_embed()
+
+        return self
 
     def _add_split_field(self, name, value, inline):
         """ Split a field into multiple fields if the value is too long. """
@@ -167,10 +220,6 @@ class EmbedSplitter:
         self.cur_num_fields += len(self._field_cache)
         self._field_cache.clear()
 
-    def _is_too_long(self, new_length=0):
-        """ Check if current embed would be too long with ``new_length`` characters added to it. """
-        return get_embed_size(self.cur_embed) + new_length > Limits.EMBED_TOTAL
-
     def _num_fields(self):
         """ Check number of fields of the current embed, including cached fields. """
         return self.cur_num_fields + len(self._field_cache)
@@ -182,14 +231,14 @@ class EmbedSplitter:
             e_new.title = embed.title
             e_new.url = embed.url
             author = embed.author
-            if author.name is not EmptyEmbed:
+            if author.name:  # name must be set for author field
                 e_new.set_author(name=author.name, url=author.url, icon_url=author.icon_url)
         if desc:
             e_new.description = embed.description
         if image:
-            if embed.image.url is not EmptyEmbed:
+            if embed.image.url:
                 e_new.set_image(url=embed.image.url)
-            if embed.thumbnail.url is not EmptyEmbed:
+            if embed.thumbnail.url:
                 e_new.set_thumbnail(url=embed.thumbnail.url)
         if footer:
             e_new.timestamp = embed.timestamp
@@ -211,10 +260,3 @@ class EmbedSplitter:
 
     def __len__(self):
         return len(self._embeds)
-
-
-def get_embed_size(e: Embed):
-    size = sum(len(s) for s in (e.title, e.description, e.author.name, e.footer.text)
-               if s is not EmptyEmbed)
-    size_fields = sum(len(f.name) + len(f.value) for f in e.fields)
-    return size + size_fields

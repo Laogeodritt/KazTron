@@ -3,8 +3,8 @@ from collections import OrderedDict
 from .kazcog import KazCog
 from .scheduler import Scheduler, TaskInstance, task
 
-__release__ = "2.5"  # release stream, usually major.minor only
-__version__ = "2.5.0"
+__release__ = "3.0"  # release stream, usually major.minor only
+__version__ = "3.0.0a1-migrate1x"
 
 bot_info = {
     "version": __version__,

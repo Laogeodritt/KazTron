@@ -29,39 +29,8 @@ def apply_patches(client: commands.Bot, excl=tuple()):
     """
     if Patches.smart_quotes not in excl:
         patch_smart_quotes(client)
-    if Patches.everyone_filter not in excl:
-        patch_everyone_filter(client)
     if Patches.mobile_embeds not in excl:
         patch_mobile_embeds(client)
-
-
-def patch_everyone_filter(client: commands.Bot):
-    """
-    Patch to prevent @everyone and @here from being sent if not explicitly desired.
-
-    This allows the bot to maintain the @everyone permission for cases where it's used
-    intentionally, while avoiding most accidental uses or possible privilege-escalation
-    vulnerabilities where KazTron makes use of user inputs.
-
-    This patch is not quite as transparent/backwards-compatible as others, as it adds an
-    `allow_everyone` parameter to the method.
-    """
-    old_send_message = client.send_message
-    conversion_map = {
-        '@everyone': '@\u200beveryone',  # alternative: '@\u0435v\u0435ry\u03bfn\u0435'
-        '@here': '@\u200bhere',  # alternative: '@h\u0435r\u0435'
-    }
-
-    @functools.wraps(client.send_message)
-    async def new_send_message(self, dest, content=None, *args, allow_everyone=False, **kwargs):
-        if content is not None:
-            content = str(content)
-            if not allow_everyone:
-                for f, r in conversion_map.items():
-                    content = content.replace(f, r)
-        return await old_send_message(dest, content, *args, **kwargs)
-    # noinspection PyArgumentList
-    client.send_message = MethodType(new_send_message, client)
 
 
 def patch_smart_quotes(client: commands.Bot):
@@ -149,5 +118,3 @@ def patch_mobile_embeds(client: commands.Bot):
     #
     # EmbedSplitter.__init__ = new_es_init
     # EmbedSplitter.set_footer = new_set_footer
-
-

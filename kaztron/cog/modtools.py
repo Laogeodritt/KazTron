@@ -13,7 +13,7 @@ from kaztron.config import SectionView
 from kaztron.theme import solarized
 from kaztron.utils.checks import mod_only, mod_channels, pm_only
 from kaztron.utils.converter import MemberConverter2
-from kaztron.utils.discord import get_named_role, Limits
+from kaztron.utils.discord import get_role_by_name, Limits
 from kaztron.utils.embeds import EmbedSplitter
 from kaztron.utils.logging import message_log_str
 
@@ -78,7 +78,7 @@ class ModTools(KazCog):
         for status_role_name, distinguish_role_name in self.cog_config.distinguish_map.items():
             status_role = discord.utils.get(ctx.message.server.roles, name=status_role_name)
             if status_role and status_role in ctx.message.author.roles:
-                distinguish_role = get_named_role(ctx.message.server, distinguish_role_name)
+                distinguish_role = get_role_by_name(ctx.message.server, distinguish_role_name)
                 await self.bot.add_roles(ctx.message.author, distinguish_role)
                 await self.bot.delete_message(ctx.message)
                 logger.info("up: Gave {} the {} role"
@@ -102,7 +102,7 @@ class ModTools(KazCog):
         for status_role_name, distinguish_role_name in self.cog_config.distinguish_map.items():
             status_role = discord.utils.get(ctx.message.server.roles, name=status_role_name)
             if status_role and status_role in ctx.message.author.roles:
-                distinguish_role = get_named_role(ctx.message.server, distinguish_role_name)
+                distinguish_role = get_role_by_name(ctx.message.server, distinguish_role_name)
                 await self.bot.remove_roles(ctx.message.author, distinguish_role)
                 await self.bot.delete_message(ctx.message)
                 logger.info("down: Took away from {} the {} role"
@@ -398,7 +398,7 @@ class ModTools(KazCog):
         es.add_field_no_break(name="Sender", value=ctx.message.author.mention, inline=True)
         es.add_field(name="Report Message", value=text, inline=False)
         try:
-            notif_role = get_named_role(self.server, self.cog_config.notif_role)
+            notif_role = get_role_by_name(self.server, self.cog_config.notif_role)
             notif_role_mention = notif_role.mention
         except ValueError:
             notif_role_mention = ''

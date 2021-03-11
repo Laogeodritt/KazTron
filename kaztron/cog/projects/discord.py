@@ -6,7 +6,7 @@ from discord.ext import commands
 
 from kaztron.theme import solarized
 from . import model as m, query as q
-from kaztron.utils.discord import extract_role_id, get_named_role, user_mention, role_mention
+from kaztron.utils.discord import extract_role_id, get_role_by_name, user_mention, role_mention
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ def get_role(server: discord.Server, role_arg: str) -> discord.Role:
         role_id = extract_role_id(role_arg)
     except discord.InvalidArgument:  # no ID, treat as a role name
         try:
-            role = get_named_role(server, role_arg)  # type: discord.Role
+            role = get_role_by_name(server, role_arg)  # type: discord.Role
         except discord.InvalidArgument:
             logger.warning("Cannot find role {!r} as name or ID".format(role_arg))
             role = None

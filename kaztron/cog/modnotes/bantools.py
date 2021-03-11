@@ -14,7 +14,7 @@ from kaztron.errors import BotCogError
 from kaztron.kazcog import ready_only
 from kaztron.utils.checks import mod_only, mod_channels
 from kaztron.utils.datetime import format_timedelta
-from kaztron.utils.discord import get_named_role
+from kaztron.utils.discord import get_role_by_name
 from kaztron.utils.strings import parse_keyword_args
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ class BanTools(KazCog):
             ban_perma_enforce=False
         )
         self.cog_config.set_converters('ban_check_interval', lambda s: timedelta(seconds=s), None)
-        self.cog_config.set_converters('ban_role', lambda r: get_named_role(self.server, r), None)
+        self.cog_config.set_converters('ban_role', lambda r: get_role_by_name(self.server, r), None)
         self.cog_config.set_converters('channel_mod', self.get_channel, None)
         self.cog_modnotes: ModNotes = None
         self.modnotes_patch_applied = False

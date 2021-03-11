@@ -328,7 +328,7 @@ class KazCog:
         return self.core and self in self.core.ready_cogs
 
     @property
-    def bot(self):
+    def bot(self) -> commands.Bot:
         return self._bot
 
     @property

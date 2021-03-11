@@ -16,7 +16,7 @@ from discord.ext import commands
 
 from kaztron.config import get_kaztron_config, SectionView
 from kaztron.utils.checks import CheckId
-from kaztron.utils.discord import get_named_role, get_command_prefix
+from kaztron.utils.discord import get_role_by_name, get_command_prefix
 from kaztron.utils.logging import exc_log_str
 from .kazcog import KazCog
 
@@ -323,7 +323,7 @@ class CoreHelpParser:
                 for role_name in check_data:
                     for server in bot.servers:
                         try:
-                            role = get_named_role(server, role_name)
+                            role = get_role_by_name(server, role_name)
                             roles.append(role.name)
                             break
                         except ValueError:

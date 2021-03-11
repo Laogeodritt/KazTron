@@ -12,7 +12,7 @@ from kaztron.config import SectionView
 from kaztron.kazcog import ready_only
 from kaztron.utils.checks import mod_only
 from kaztron.utils.datetime import format_timedelta
-from kaztron.utils.discord import get_group_help, get_jump_url
+from kaztron.utils.discord import get_group_help
 from kaztron.utils.embeds import EmbedSplitter
 from kaztron.utils.logging import tb_log_str, exc_log_str
 from kaztron.utils.strings import natural_truncate, format_list
@@ -390,7 +390,7 @@ class Sticky(KazCog):
         for data in sorted_data:
             try:
                 jump_url = ' *([link]({}))*'.format(
-                    get_jump_url(await data.get_posted_message(self.bot))
+                    (await data.get_posted_message(self.bot)).jump_url
                 )
             except (AttributeError, discord.NotFound):
                 jump_url = ''

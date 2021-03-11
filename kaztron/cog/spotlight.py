@@ -18,8 +18,8 @@ from kaztron.utils.converter import NaturalDateConverter
 from kaztron.utils.datetime import utctimestamp, parse as dt_parse, parse_daterange, \
     get_month_offset, truncate, format_timedelta
 from kaztron.utils.decorators import error_handler, natural_truncate
-from kaztron.utils.discord import get_named_role, Limits, remove_role_from_all, \
-    extract_user_id, user_mention, get_member, get_group_help, get_members_with_role
+from kaztron.utils.discord import get_role_by_name, Limits, remove_role_from_all, \
+    extract_user_id, user_mention, get_member, get_group_help
 from kaztron.utils.embeds import EmbedSplitter
 from kaztron.utils.logging import message_log_str, tb_log_str, exc_log_str
 from kaztron.utils.strings import format_list, split_chunks_on
@@ -547,11 +547,11 @@ class Spotlight(KazCog):
                            "this is OK if client reconnected")
 
         for role_name in (self.role_host_name, self.role_audience_name):
-            get_named_role(self.server, role_name)  # raise error early if any don't exist
+            get_role_by_name(self.server, role_name)  # raise error early if any don't exist
 
         # role_mods_name is optional
         try:
-            get_named_role(self.server, self.role_mods_name)
+            get_role_by_name(self.server, self.role_mods_name)
         except ValueError:
             msg = "Configuration spotlight.mod_role is not valid: role '{}' not found"\
                 .format(self.role_mods_name)
@@ -703,7 +703,7 @@ class Spotlight(KazCog):
             return  # get_current() already handles this
 
         try:
-            role = get_named_role(ctx.message.server, self.role_audience_name)
+            role = get_role_by_name(ctx.message.server, self.role_audience_name)
         except ValueError:
             logger.exception("Can't retrieve Spotlight Audience role")
             role = None
@@ -724,8 +724,8 @@ class Spotlight(KazCog):
         await self.send_validation_warnings(ctx, current_app)
 
         # remove host role
-        host_role = get_named_role(self.server, self.role_host_name)
-        await remove_role_from_all(self.bot, self.server, host_role)
+        host_role = get_role_by_name(self.server, self.role_host_name)
+        await remove_role_from_all(host_role)
 
         # Assign the role to the selected app's owner
         try:
@@ -1197,7 +1197,7 @@ class Spotlight(KazCog):
             date.fromtimestamp(queue_item['start']),
             date.fromtimestamp(queue_item['end'])
         )
-        mod_mention = get_named_role(self.server, self.role_mods_name).mention \
+        mod_mention = get_role_by_name(self.server, self.role_mods_name).mention \
             if self.role_mods_name else ""
 
         await self.send_output(self.QUEUE_REMINDER.format(
@@ -1210,9 +1210,9 @@ class Spotlight(KazCog):
         self._schedule_upcoming_reminder()
 
     def get_host(self) -> Optional[discord.Member]:
-        host_role = get_named_role(self.server, self.role_host_name)
+        host_role = get_role_by_name(self.server, self.role_host_name)
         try:
-            return get_members_with_role(self.server, host_role)[0]
+            return host_role.members[0]
         except IndexError:
             logger.warning("Cannot find user with host role!")
             return None
@@ -1237,8 +1237,8 @@ class Spotlight(KazCog):
 
         host = self.get_host()
         host_mention = host.mention if host is not None else "<Error: Cannot find host>"
-        audience_mention = get_named_role(self.server, self.role_audience_name).mention
-        mod_mention = get_named_role(self.server, self.role_mods_name).mention \
+        audience_mention = get_role_by_name(self.server, self.role_audience_name).mention
+        mod_mention = get_role_by_name(self.server, self.role_mods_name).mention \
             if self.role_mods_name else ""
         duration_s = format_timedelta(timedelta(seconds=self.duration), timespec="minutes")
 
@@ -1354,8 +1354,8 @@ class Spotlight(KazCog):
     async def _send_end(self, stop=False):
         host = self.get_host()
         host_mention = host.mention if host else "<Error: Cannot find host>"
-        audience_mention = get_named_role(self.server, self.role_audience_name).mention
-        mod_mention = get_named_role(self.server, self.role_mods_name).mention \
+        audience_mention = get_role_by_name(self.server, self.role_audience_name).mention
+        mod_mention = get_role_by_name(self.server, self.role_mods_name).mention \
             if self.role_mods_name else ""
 
         if not stop:
@@ -1374,9 +1374,9 @@ class Spotlight(KazCog):
         await self.send_output(log_msg)
 
         logger.info("Removing host role")
-        host_role = get_named_role(self.server, self.role_host_name)
+        host_role = get_role_by_name(self.server, self.role_host_name)
         try:
-            for m in get_members_with_role(self.server, host_role):
+            for m in host_role.members:
                 await self.bot.remove_roles(m, host_role)
         except discord.HTTPException as e:
             logger.exception("While trying to remove host role, an exception occurred")

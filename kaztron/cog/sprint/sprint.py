@@ -12,7 +12,7 @@ from kaztron.utils.checks import in_channels_cfg
 from kaztron.utils.converter import NaturalDateConverter, NaturalInteger
 from kaztron.utils.datetime import format_date, format_timedelta, parse as dt_parse, \
     get_weekday
-from kaztron.utils.discord import check_mod, get_named_role, remove_role_from_all, \
+from kaztron.utils.discord import check_mod, get_role_by_name, remove_role_from_all, \
     get_member, get_group_help
 from kaztron.utils.logging import message_log_str
 from kaztron.utils.strings import format_list
@@ -366,7 +366,7 @@ class WritingSprint(KazCog):
     def _update_roles(self):
         server = self.channel.server
         try:
-            self.role_follow = get_named_role(server, self.role_follow_name)
+            self.role_follow = get_role_by_name(server, self.role_follow_name)
             self.role_follow_mention = self.role_follow.mention
         except ValueError:
             self.role_follow = None
@@ -374,7 +374,7 @@ class WritingSprint(KazCog):
             raise
 
         try:
-            self.role_sprint = get_named_role(server, self.role_sprint_name)
+            self.role_sprint = get_role_by_name(server, self.role_sprint_name)
             self.role_sprint_mention = self.role_sprint.mention
         except ValueError:
             self.role_sprint = None
@@ -402,7 +402,7 @@ class WritingSprint(KazCog):
             participants='\n'.join(participants_strlist)
         )
 
-        await remove_role_from_all(self.bot, self.channel.server, self.role_sprint)
+        await remove_role_from_all(self.role_sprint)
         logger.debug("Removed all users from {} role".format(self.role_sprint_name))
 
     async def on_ready(self):
@@ -1189,7 +1189,7 @@ class WritingSprint(KazCog):
             winner_name = 'nobody'
             winner_wc = 0
 
-        await remove_role_from_all(self.bot, self.channel.server, self.role_sprint)
+        await remove_role_from_all(self.role_sprint)
         logger.debug("Removed all users from {} role".format(self.role_sprint_name))
 
         await self._display_embed(

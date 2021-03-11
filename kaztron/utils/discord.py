@@ -1,5 +1,5 @@
 import re
-from typing import List
+from typing import List, Sequence, Iterable
 
 import discord
 from discord.ext import commands
@@ -26,7 +26,7 @@ class Limits:
     NAME = 32
 
 
-def check_role(rolelist, message):
+def check_role(rolelist: Iterable[str], message: discord.Message):
     """
     Check if the author of a ``message`` has one of the roles in ``rolelist``.
 
@@ -35,27 +35,23 @@ def check_role(rolelist, message):
         to check.
     """
     for role in rolelist:
-        # noinspection PyBroadException
-        try:
-            if discord.utils.get(message.server.roles, name=role) in message.author.roles:
-                return True
-        except Exception:
-            pass
+        if discord.utils.get(message.author.roles, name=role) is not None:
+            return True
     else:
         return False
 
 
-def get_named_role(server: discord.Server, role_name: str) -> discord.Role:
+def get_role_by_name(guild: discord.Guild, role_name: str) -> discord.Role:
     """
     Get a role by name. This is a convenience function, providing a ValueError if the role does not
     exist instead of returning None and causing a less clear exception downstream.
 
-    :param server: Server on which to find the role
+    :param guild: Server on which to find the role
     :param role_name: Role name to find
     :return: Discord Role corresponding to the given name
     :raises ValueError: role does not exist
     """
-    role = discord.utils.get(server.roles, name=role_name)
+    role = discord.utils.get(guild.roles, name=role_name)
     if role is None:
         raise ValueError("Role '{!s}' not found.".format(role_name))
     return role
@@ -80,26 +76,13 @@ def check_admin(ctx: commands.Context):
     return check_role(config.get("discord", "admin_roles", []), ctx.message)
 
 
-async def remove_role_from_all(client: discord.Client, server: discord.Server, role: discord.Role):
+async def remove_role_from_all(role: discord.Role):
     """
     Removes a role from all users on the server who have that role.
-    :param client: Discord client or bot instance.
-    :param server:
-    :param role:
+    :param role: Role to remove.
     """
-    for u in server.members:
-        if role in u.roles:
-            await client.remove_roles(u, role)
-
-
-def get_members_with_role(server: discord.Server, role: discord.Role) -> List[discord.Member]:
-    """
-    Find a list of users with a particular role.
-    :param server: Server to search users on
-    :param role: Role to find
-    :return: List of users matching role
-    """
-    return [u for u in server.members if role in u.roles]
+    for m in role.members:
+        await m.remove_roles(role)
 
 
 def user_mention(user_id: str) -> str:
@@ -135,7 +118,7 @@ _re_user_id = re.compile(r'(?:(?:\\)?<@|@)?!?([0-9]{15,23})>?')
 _re_role_id = re.compile(r'(?:(?:\\)?<@&|@&|&)?([0-9]{15,23})>?')
 
 
-def extract_user_id(input_id: str) -> str:
+def extract_user_id(input_id: str) -> int:
     """
     Validate and extract a user ID from an input (@mention, raw user ID, etc.).
 
@@ -163,10 +146,10 @@ def extract_user_id(input_id: str) -> str:
     :raise discord.InvalidArgument: id is not a recognised user ID format
     """
     if 15 <= len(input_id) <= 23 and input_id.isnumeric():
-        return input_id
+        return int(input_id)
 
     try:
-        return _re_user_id.fullmatch(input_id).group(1)
+        return int(_re_user_id.fullmatch(input_id).group(1))
     except AttributeError:  # no match - fullmatch() returned None
         raise discord.InvalidArgument('Invalid user ID format {!r}'.format(input_id))
 
@@ -213,18 +196,38 @@ def get_member(ctx: commands.Context, user: str) -> discord.Member:
         * JaneDoe
     
     :return:
-    :raises discord.InvalidArgument: user not found
+    :raises commands.MemberNotFound: user not found
     """
 
     # try our own extractor as it handles more weird input cases
     # if fail assume it's a name lookup
+    result = None
+    guild = ctx.guild
     try:
         s_user_id = extract_user_id(user)
     except discord.InvalidArgument:
-        s_user_id = user
+        # cannot extract ID: assume name lookup
+        if guild:
+            result = guild.get_member_named(user)
+        else:
+            for guild in ctx.bot.guilds:  # type: discord.Guild
+                result = guild.get_member_named(user)
+                if result:
+                    break
+    else:
+        if guild:
+            result = guild.get_member(s_user_id) or \
+                     discord.utils.get(ctx.message.mentions, id=s_user_id)
+        else:
+            for guild in ctx.bot.guilds:  # type: discord.Guild
+                result = guild.get_member(s_user_id)
+                if result:
+                    break
 
-    member_converter = commands.MemberConverter(ctx, s_user_id)
-    return member_converter.convert()
+    if result is None:
+        raise commands.MemberNotFound(user)
+
+    return result
 
 
 def get_command_prefix(ctx: commands.Context) -> str:
@@ -247,7 +250,7 @@ def get_command_str(ctx: commands.Context) -> str:
     # if ctx.subcommand_passed:
     #    cmd_str += " {0.subcommand_passed}".format(ctx)
     # return cmd_str
-    return "{0}{1.command!s}".format(get_command_prefix(ctx), ctx)
+    return "{}{}".format(get_command_prefix(ctx), ctx.command.qualified_name)
 
 
 def get_help_str(ctx: commands.Context) -> str:
@@ -263,17 +266,17 @@ def get_help_str(ctx: commands.Context) -> str:
     #     cmd_str += " {0.subcommand_passed}".format(ctx)
     # return cmd_str
 
-    return "{0}help {1.command!s}".format(get_command_prefix(ctx), ctx)
+    return "{}help {}".format(get_command_prefix(ctx), ctx.command.qualified_name)
 
 
 def get_usage_str(ctx: commands.Context) -> str:
     """
     Retrieves the signature portion of the help page.
 
-    Based on discord.ext.commands.formatter.HelpFormatter.get_command_signature()
-    https://github.com/Rapptz/discord.py/blob/async/discord/ext/commands/formatter.py
+    Based on discord.ext.commands.help.HelpCommand.get_command_signature()
+    https://github.com/Rapptz/discord.py/blob/master/discord/ext/commands/help.py
 
-    Copyright (c) 2015-2016 Rapptz. Distributed under the MIT Licence.
+    Copyright (c) 2015-2021 Rapptz. Distributed under the MIT Licence.
     """
     result = []
     prefix = get_command_prefix(ctx)
@@ -281,31 +284,16 @@ def get_usage_str(ctx: commands.Context) -> str:
     parent = cmd.full_parent_name
     if len(cmd.aliases) > 0:
         aliases = '|'.join(cmd.aliases)
-        fmt = '{0}[{1.name}|{2}]'
-        if parent:
-            fmt = '{0}{3} [{1.name}|{2}]'
-        result.append(fmt.format(prefix, cmd, aliases, parent))
+        full_name = f'[{cmd.name}|{aliases}]'
     else:
-        name = prefix + cmd.name if not parent else prefix + parent + ' ' + cmd.name
-        result.append(name)
+        full_name = cmd.name
 
-    params = cmd.clean_params
-    if len(params) > 0:
-        for name, param in params.items():
-            if param.default is not param.empty:
-                # We don't want None or '' to trigger the [name=value] case and instead it should
-                # do [name] since [name=None] or [name=] are not exactly useful for the user.
-                should_print = param.default if isinstance(param.default, str)\
-                               else param.default is not None
-                if should_print:
-                    result.append('[{}={}]'.format(name, param.default))
-                else:
-                    result.append('[{}]'.format(name))
-            elif param.kind == param.VAR_POSITIONAL:
-                result.append('[{}...]'.format(name))
-            else:
-                result.append('<{}>'.format(name))
+    if parent:
+        result.append(f'{prefix}{parent} {full_name}')
+    else:
+        result.append(f'{prefix}{full_name}')
 
+    result.append(cmd.signature)
     return ' '.join(result)
 
 
@@ -316,17 +304,3 @@ def get_group_help(ctx: commands.Context):
     return ('Invalid sub-command. Valid subcommands are `{0!s}`. '
             'Use `{1}` or `{1} <subcommand>` for instructions.') \
         .format(subcommand_list, get_help_str(ctx))
-
-
-def get_jump_url(message: discord.Message):
-    """
-    Gets the direct URL to a message.
-
-    Deprecate this once we upgrade to Discord 1.0.0, jump_url is an available attribute there
-    :param message:
-    :return:
-    """
-    message.channel: discord.Channel
-    return 'https://discordapp.com/channels/{}/{}/{}'.format(
-        message.channel.server.id, message.channel.id, message.id
-    )

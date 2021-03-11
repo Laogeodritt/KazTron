@@ -13,7 +13,7 @@ from kaztron.theme import solarized
 from kaztron.utils.checks import mod_only, mod_channels, in_channels
 from kaztron.utils.converter import MemberConverter2, NaturalDateConverter, BooleanConverter, \
     NaturalInteger
-from kaztron.utils.discord import Limits, get_group_help, user_mention, get_named_role, check_mod
+from kaztron.utils.discord import Limits, get_group_help, user_mention, get_role_by_name, check_mod
 from kaztron.utils.embeds import EmbedSplitter
 from kaztron.utils.datetime import format_datetime, format_date
 
@@ -86,11 +86,11 @@ class CheckInManager(KazCog):
     async def on_ready(self):
         await super().on_ready()
         self.check_in_channel = self.get_channel(self.check_in_channel_id)
-        self.checkin_anytime_roles = tuple(get_named_role(self.server, n)
+        self.checkin_anytime_roles = tuple(get_role_by_name(self.server, n)
                                            for n in self.cog_config.check_in_window_exempt_roles)
         milestone_map = {}
         for pt, ms_map in self.cog_config.milestone_map.items():
-            milestone_map[model.ProjectType[pt]] = {get_named_role(self.server, r): v
+            milestone_map[model.ProjectType[pt]] = {get_role_by_name(self.server, r): v
                                                     for r, v in ms_map.items()}
         self.c = CheckInController(self.server, self.cog_config, milestone_map)
         await self.schedule_checkin_announcements()

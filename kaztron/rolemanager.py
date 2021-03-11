@@ -7,7 +7,7 @@ from discord.ext import commands
 
 from kaztron import KazCog
 from kaztron.utils.checks import mod_only, admin_only
-from kaztron.utils.discord import get_named_role, get_group_help
+from kaztron.utils.discord import get_role_by_name, get_group_help
 from kaztron.utils.logging import message_log_str
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ class ManagedRole:
 
     @property
     def role(self) -> discord.Role:
-        return get_named_role(self.server, self.name)
+        return get_role_by_name(self.server, self.name)
 
     def reply_dest(self, ctx: commands.Context) -> discord.Object:
         return ctx.message.author if self.pm else ctx.message.channel

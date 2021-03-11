@@ -5,7 +5,7 @@ import discord
 
 from kaztron import KazCog
 from kaztron.config import SectionView
-from kaztron.utils.discord import remove_role_from_all, get_named_role
+from kaztron.utils.discord import remove_role_from_all, get_role_by_name
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +126,7 @@ class VoiceLog(KazCog):
 
         # clear the in_voice role
         logger.info("Removing role '{}' from all members...".format(self.role_voice.name))
-        await remove_role_from_all(self.bot, self.server, self.role_voice)
+        await remove_role_from_all(self.role_voice)
 
         # and add all collected members to that role
         logger.info("Giving role '{}' to all members in voice channels [{}]..."

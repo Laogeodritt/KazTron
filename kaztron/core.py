@@ -57,6 +57,7 @@ class CoreCog(kaztron.KazCog):
 
         self.bot.event(self.on_error)  # register this as a global event handler, not just local
         self.bot.add_check(self._check_bot_ready)
+        self.bot.before_invoke(self._before_invoke_log)
         self.ready_cogs = set()
         self.error_cogs = set()
 
@@ -73,6 +74,10 @@ class CoreCog(kaztron.KazCog):
             return True
         else:
             raise BotNotReady(type(self).__name__)
+
+    async def _before_invoke_log(self, ctx: commands.Context):
+        cmd_logger = logging.getLogger("kaztron.commands")
+        cmd_logger.info("{!s}: {}".format(self, message_log_str(ctx.message)))
 
     def set_cog_ready(self, cog):
         """
@@ -135,7 +140,7 @@ class CoreCog(kaztron.KazCog):
     async def set_status_message(self):
         playing = self.config.discord.playing
         if playing:
-            await self.bot.change_presence(game=discord.Game(name=playing))
+            await self.bot.change_presence(activity=discord.Game(name=playing))
 
     async def send_startup_message(self):
         startup_info = (

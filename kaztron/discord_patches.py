@@ -30,7 +30,7 @@ def apply_patches(client: commands.Bot, excl=tuple()):
     if Patches.smart_quotes not in excl:
         patch_smart_quotes(client)
     if Patches.mobile_embeds not in excl:
-        patch_mobile_embeds(client)
+        patch_mobile_embeds()
 
 
 def patch_smart_quotes(client: commands.Bot):
@@ -67,7 +67,7 @@ def patch_smart_quotes(client: commands.Bot):
     client.process_commands = MethodType(new_process_commands, client)
 
 
-def patch_mobile_embeds(client: commands.Bot):
+def patch_mobile_embeds():
     """
     Patch to fix a stupid, stupid Android!Discord bug where it doesn't consider Embed fields when
     calculating the width of the embed. Yup. Sigh.
@@ -76,10 +76,11 @@ def patch_mobile_embeds(client: commands.Bot):
     scrolls forever because all of the field contents are wrapping like hell.
     """
     from discord.embeds import Embed
-    old_send_message = client.send_message
+    from discord.abc import Messageable
+    old_send = Messageable.send
 
-    @functools.wraps(client.send_message)
-    async def new_send_message(self, dest, content=None, *args, **kwargs):
+    @functools.wraps(Messageable.send)
+    async def new_send(self, content=None, **kwargs):
         e = kwargs.get('embed', None)
 
         def min_len(x):
@@ -93,28 +94,6 @@ def patch_mobile_embeds(client: commands.Bot):
                 e.set_footer(text=hr if e.timestamp is Embed.Empty else hr_ts)
             elif hr not in e.footer.text:
                 e.set_footer(text=hr + '\n' + e.footer.text)
-        return await old_send_message(dest, content, *args, **kwargs)
+        return await old_send(self, content, **kwargs)
     # noinspection PyArgumentList
-    client.send_message = MethodType(new_send_message, client)
-
-    # old_set_footer = EmbedSplitter.set_footer
-    #
-    # @functools.wraps(EmbedSplitter.set_footer)
-    # def new_set_footer(self, *, text: str, **kwargs):
-    #     if not self.suppress_patch_mobile:
-    #         if text == Embed.Empty:
-    #             text = '_'*80
-    #         else:
-    #             text = (r'_'*80) + '\n' + text
-    #     old_set_footer(self, text=text, **kwargs)
-    #
-    # old_es_init = EmbedSplitter.__init__
-    #
-    # @functools.wraps(EmbedSplitter.__init__)
-    # def new_es_init(self, *args, **kwargs):
-    #     old_es_init(self, *args, **kwargs)
-    #     self.suppress_patch_mobile = False
-    #     self.set_footer(text='')
-    #
-    # EmbedSplitter.__init__ = new_es_init
-    # EmbedSplitter.set_footer = new_set_footer
+    Messageable.send = new_send

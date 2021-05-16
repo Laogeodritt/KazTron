@@ -98,4 +98,4 @@ if __name__ == '__main__':
             runner.run_reboot_loop(loop)
 
     else:
-        print("Usage: ./kaztron.py <start|stop|debug|help>\n")
+        print("Usage: ./kaztron.py <start|stop|restart|debug|help>\n")

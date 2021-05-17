@@ -138,8 +138,9 @@ l
         delete the message itself, but throws an UnauthorizedChannelDelete error to allow an
         ``on_command_error`` handler to take appropriate action.
     :param include_mods: Also include mod channels.
-    :param include_admin: Also include admin channels.
+    :param include_admins: Also include admin channels.
     :param include_bot: Also include bot and test channels.
+    :param check_id: Type of check, for the purpose of automatic documentation generation.
 
     :raise UnauthorizedChannelError:
     :raise UnauthorizedChannelDelete:

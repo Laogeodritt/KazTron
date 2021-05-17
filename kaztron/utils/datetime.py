@@ -108,6 +108,7 @@ def format_timedelta(delta: timedelta, timespec="seconds") -> str:
     str_parts = []
 
     timespec_list = ['days', 'hours', 'minutes', 'seconds', 'microseconds']
+    res = None
     try:
         timespec_prio = timespec_list.index(timespec)
 

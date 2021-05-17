@@ -1,11 +1,10 @@
 """
-Patches for discord.py v0.16.x.
+Patches for discord.py v1.x.
 
 These are all hacky as hell and I'm not proud of 'em.
 """
 
 import functools
-import logging
 from types import MethodType
 from enum import Enum
 
@@ -62,7 +61,7 @@ def patch_smart_quotes(client: commands.Bot):
     async def new_process_commands(self, message, *args, **kwargs):
         for f, r in conversion_map.items():
             message.content = message.content.replace(f, r)
-        return await old_process_commands(message, *args, **kwargs)
+        return await old_process_commands(message)
     # noinspection PyArgumentList
     client.process_commands = MethodType(new_process_commands, client)
 

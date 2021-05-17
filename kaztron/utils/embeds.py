@@ -253,7 +253,7 @@ class EmbedSplitter:
             footer = self.template.footer
             self.cur_embed.timestamp = self.template.timestamp
             self.cur_embed.set_footer(text=footer.text, icon_url=footer.icon_url)
-        self.cur_embed = None
+        self._cur_embed = None
         embeds = list(self._embeds)
         self._embeds.clear()
         return embeds

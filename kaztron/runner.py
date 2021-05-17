@@ -1,18 +1,18 @@
 import asyncio
 import logging
-import random
 import sys
-import time
 
+import discord
 from discord.ext import commands
 
 import kaztron
 from kaztron import KazCog
 from kaztron.config import get_kaztron_config, KaztronConfig, get_runtime_config
 from kaztron.discord_patches import apply_patches
-from kaztron.help_formatter import CoreHelpParser, DiscordHelpFormatter
+# from kaztron.help_formatter import CoreHelpParser, DiscordHelpFormatter
 from kaztron.scheduler import Scheduler
 
+__all__ = ('ErrorCodes', 'run', 'get_daemon_context')
 logger = logging.getLogger("kaztron.bootstrap")
 
 
@@ -22,34 +22,54 @@ class ErrorCodes:
     DAEMON_RUNNING = 4
     DAEMON_NOT_RUNNING = 5
     EXTENSION_LOAD = 7
-    RETRY_MAX_ATTEMPTS = 8
     CFG_FILE = 17
 
 
 def run(loop: asyncio.AbstractEventLoop):
-    """
-    Run the bot once.
-    """
+    """ Set up and run the bot. """
+
+    logger.info("Welcome to KazTron v{}, booting up...".format(kaztron.__version__))
+
     config = get_kaztron_config()
     state = get_runtime_config()
     kaztron.KazCog.static_init(config, state)
 
     # custom help formatters
-    kaz_help_parser = CoreHelpParser({
-        'name': config.core.get('name')
-    })
+    # kaz_help_parser = CoreHelpParser({
+    #     'name': config.core.get('name')
+    # })
+
+    # intents
+    intents = discord.Intents.default()
+    intents.members = True
+    intents.typing = False
+    intents.presences = False
+    intents.integrations = False
+    intents.webhooks = False
+    intents.invites = False
 
     # create bot instance (+ some custom hacks)
     client = commands.Bot(
+        # Client arguments
+        intents=intents,
+        chunk_guilds_at_startup=True,
+        status=discord.Status.idle,
+        activity=discord.CustomActivity("Starting up...", emoji=discord.PartialEmoji(name='⏱️')),
+        # disallow @everyone/@here by default; per-msg override via allowed_mentions param to send()
+        allowed_mentions=discord.AllowedMentions(everyone=False),
+
+        # Bot arguments
         command_prefix='.',
-        formatter=DiscordHelpFormatter(kaz_help_parser, show_check_failure=True),
-        description='This an automated bot for the /r/worldbuilding discord server',
-        pm_help=True)
+        description=config.get('core', 'description'),
+        pm_help=True,
+        # formatter=DiscordHelpFormatter(kaz_help_parser, show_check_failure=True)
+        # help_command=
+        )
     apply_patches(client)
 
     # KazTron-specific extension classes
     client.scheduler = Scheduler(client)
-    client.kaz_help_parser = kaz_help_parser
+    # client.kaz_help_parser = kaz_help_parser
 
     # Load core extension (core + rolemanager)
     client.load_extension("kaztron.core")
@@ -67,8 +87,7 @@ def run(loop: asyncio.AbstractEventLoop):
 
     # noinspection PyBroadException
     try:
-        loop.run_until_complete(client.login(config.get("discord", "token")))
-        loop.run_until_complete(client.connect())
+        loop.run_until_complete(client.start(config.get("discord", "token"), reconnect=True))
     except KeyboardInterrupt:
         logger.info("Interrupted by user")
         logger.debug("Waiting for client to close...")
@@ -80,10 +99,7 @@ def run(loop: asyncio.AbstractEventLoop):
         logger.debug("Waiting for client to close...")
         loop.run_until_complete(client.close())
         logger.info("Client closed.")
-
-        # Let the external retry reboot the bot - attempt recovery from errors
-        # sys.exit(ErrorCodes.ERROR)
-        return
+        raise
     finally:
         logger.debug("Cancelling pending tasks...")
         # BEGIN CONTRIB
@@ -106,51 +122,11 @@ def run(loop: asyncio.AbstractEventLoop):
         KazCog.state.write()
 
 
-def run_reboot_loop(loop: asyncio.AbstractEventLoop):
-    """
-    Run the bot, and re-run it if it fails or disconnects. The bot will still stop if an error
-    bubbles outside the event loop, in the case that KeyboardInterrupt is raised (Ctrl+C/SIGINT),
-    or that sys.exit() is called.
-    """
-    def reset_backoff(backoff: Backoff, sequence):
-        if sequence == backoff.n:  # don't do it if we had a retry in the meantime
-            backoff.reset()
-
-    logger.info("Welcome to KazTron v{}, booting up...".format(kaztron.__version__))
-
-    # noinspection PyBroadException
-    try:
-        bo_timer = Backoff(initial_time=3.0, base=1.58, max_attempts=12)
-        wait_time = 0
-        while True:
-            reset_task = loop.call_later(wait_time, reset_backoff, bo_timer, bo_timer.n)
-            run(loop)
-            logger.error("Bot halted unexpectedly.")
-            reset_task.cancel()
-            wait_time = bo_timer.next()
-            logger.info("Restarting bot in {:.1f} seconds...".format(wait_time))
-            time.sleep(wait_time)
-            logger.info("Restarting bot...")
-    except StopIteration:
-        logger.error("Too many failed attempts. Exiting.")
-        sys.exit(ErrorCodes.RETRY_MAX_ATTEMPTS)
-    except KeyboardInterrupt:  # outside of runner.run
-        logger.info("Interrupted by user. Exiting.")
-    except Exception:
-        logger.exception("Exception in reboot loop.")
-        raise
-    finally:
-        logger.info("Exiting.")
-        loop.close()
-
-
 def get_daemon_context(config: KaztronConfig):
     import os
     import pwd
     import grp
     from pathlib import Path
-
-    # noinspection PyPackageRequirements
     from daemon import DaemonContext, pidfile
 
     bot_dir = Path(sys.modules['__main__'].__file__).resolve().parent
@@ -173,32 +149,3 @@ def get_daemon_context(config: KaztronConfig):
     if group:
         daemon_context.gid = grp.getgrnam(group).gr_gid
     return daemon_context
-
-
-class Backoff:
-    """
-    Exponential backoff driver. Doubles retry time every failure.
-
-    :param initial_time: Retry time after first failure.
-    :param base: Exponential base. Default 2.0.
-    :param max_attempts: Maximum number of attempts before giving up.
-    """
-    def __init__(self, initial_time=1.0, base=2.0, max_attempts=8):
-        self.t0 = initial_time
-        self.max = max_attempts
-        self.base = base
-        self.n = 0
-        self.reset()
-
-    def next(self):
-        """ Return the next wait time in seconds. Raises a RuntimeError if max attempts exceeded."""
-        if self.n < self.max:
-            tn = self.t0 * (self.base ** self.n) + (random.randint(0, 1000) / 1000)
-            self.n += 1
-            return tn
-        else:
-            raise StopIteration("Maximum attempts exceeded")
-
-    def reset(self):
-        """ Reset the number of attempts. """
-        self.n = 0

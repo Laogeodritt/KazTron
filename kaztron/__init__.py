@@ -26,6 +26,7 @@ cfg_defaults = {
     },
     "core": {
         "name": "UnnamedBot",
+        "description": None,
         "daemon": False,
         "daemon_pidfile": "kaztron.pid",
         "daemon_username": "",

@@ -5,7 +5,7 @@ import sys
 import logging
 
 import kaztron
-from kaztron import runner
+from kaztron.runner import *
 from kaztron.config import get_kaztron_config
 from kaztron.logging import setup_logging
 
@@ -18,7 +18,7 @@ try:
     config = get_kaztron_config(kaztron.cfg_defaults)
 except OSError as e:
     print(str(e), file=sys.stderr)
-    sys.exit(runner.ErrorCodes.CFG_FILE)
+    sys.exit(ErrorCodes.CFG_FILE)
 
 
 def stop_daemon():
@@ -48,42 +48,36 @@ if __name__ == '__main__':
 
     if cmd == 'start' and config.get('core', 'daemon', False):
         print("Starting KazTron (daemon mode)...")
-        with runner.get_daemon_context(config):
+        with get_daemon_context(config):
             print("Starting KazTron daemon...")
             setup_logging(logging.getLogger(), config, console=False)
-            loop = asyncio.get_event_loop()
-            runner.run_reboot_loop(loop)
+            run(asyncio.get_event_loop())
 
     elif cmd == 'start':  # non-daemon
         print("Starting KazTron (non-daemon mode)...")
         setup_logging(logging.getLogger(), config, console=True)
-        loop = asyncio.get_event_loop()
-        runner.run_reboot_loop(loop)
+        run(asyncio.get_event_loop())
 
     elif cmd == 'debug':
-        # override logging levels
-        print("Starting in debug mode...")
+        print("Starting KazTron (debug mode)...")
         setup_logging(logging.getLogger(), config, debug=True)
-
-        # run in console (non-daemon)
-        loop = asyncio.get_event_loop()
-        runner.run_reboot_loop(loop)
+        run(asyncio.get_event_loop())  # always non-daemon mode
 
     elif cmd == 'stop':
         if not config.get('core', 'daemon', False):
-            print("[ERROR] Cannot stop: daemon mode disabled", file=sys.stderr)
-            sys.exit(runner.ErrorCodes.DAEMON_NOT_RUNNING)
+            print("[ERROR] Cannot stop: daemon mode not enabled", file=sys.stderr)
+            sys.exit(ErrorCodes.DAEMON_NOT_RUNNING)
 
         try:
             stop_daemon()
         except TypeError:
             print("[ERROR] Cannot stop: daemon not running", file=sys.stderr)
-            sys.exit(runner.ErrorCodes.DAEMON_NOT_RUNNING)
+            sys.exit(ErrorCodes.DAEMON_NOT_RUNNING)
 
     elif cmd == 'restart':
         if not config.get('core', 'daemon', False):
-            print("[ERROR] Cannot restart: daemon mode disabled", file=sys.stderr)
-            sys.exit(runner.ErrorCodes.DAEMON_NOT_RUNNING)
+            print("[ERROR] Cannot restart: daemon mode not enabled", file=sys.stderr)
+            sys.exit(ErrorCodes.DAEMON_NOT_RUNNING)
 
         try:
             stop_daemon()
@@ -91,11 +85,10 @@ if __name__ == '__main__':
             print("[WARNING] Cannot stop: daemon not running", file=sys.stderr)
 
         print("Starting KazTron (daemon mode)...")
-        with runner.get_daemon_context(config):
+        with get_daemon_context(config):
             print("Starting KazTron daemon...")
             setup_logging(logging.getLogger(), config, console=False)
-            loop = asyncio.get_event_loop()
-            runner.run_reboot_loop(loop)
+            run(asyncio.get_event_loop())
 
     else:
         print("Usage: ./kaztron.py <start|stop|restart|debug|help>\n")

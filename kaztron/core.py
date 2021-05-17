@@ -135,10 +135,6 @@ class CoreCog(kaztron.KazCog):
         except AttributeError:
             logger.warning("Help parser not found in bot")
 
-        # disallow @everyone mentions by default; this can be overridden on a per-message basis
-        # by passing an allowed_mentions parameter to send()
-        self.bot.allowed_mentions = discord.AllowedMentions(everyone=False)
-
         await self.set_status_message()
 
     async def set_status_message(self):

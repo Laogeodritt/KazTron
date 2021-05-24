@@ -1,7 +1,9 @@
 import traceback
 
 import discord
-from kaztron.utils.datetime import format_timestamp
+from kaztron.utils.datetime import format_timestamp as _format_timestamp
+
+__all__ = ('message_log_str', 'exc_msg_str', 'exc_log_str', 'tb_log_str')
 
 
 def message_log_str(message: discord.Message) -> str:
@@ -12,7 +14,7 @@ def message_log_str(message: discord.Message) -> str:
     [2012-01-01 12:34:56] <#channel:username#1234> "Message here"
     """
     return "[{}] <#{!s}:{!s}> {!r}"\
-        .format(format_timestamp(message),
+        .format(_format_timestamp(message),
                 message.channel, message.author, message.content)
 
 

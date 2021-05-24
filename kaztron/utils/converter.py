@@ -1,74 +1,74 @@
-from discord.ext import commands
+from discord.ext import commands as _commands
 
-import kaztron.utils.datetime as utils_dt
-from kaztron.utils.discord import get_member
+import kaztron.utils.datetime as _utils_dt
+from kaztron.utils.discord import get_member as _get_member
 
 # noinspection PyUnresolvedReferences
 from discord.ext.commands.converter import *
 
 
-class NaturalDateConverter(commands.Converter):
+class NaturalDateConverter(_commands.Converter):
     """
     Convert natural language date strings to datetime using the dateparser library.
 
     Note: If the string contains spaces, the user must include it in quotation marks for it to be
     considered a single argument.
     """
-    async def convert(self, ctx: commands.Context, argument: str):
-        date = utils_dt.parse(argument)
+    async def convert(self, ctx: _commands.Context, argument: str):
+        date = _utils_dt.parse(argument)
         if date is None:
-            raise commands.BadArgument("Parameter {!r} could not be parsed as a date string"
+            raise _commands.BadArgument("Parameter {!r} could not be parsed as a date string"
                 .format(argument))
         return date
 
 
-class FutureDateRange(commands.Converter):
+class FutureDateRange(_commands.Converter):
     """
     Convert a natural language date range, in the form "date1 to date2". If there is ambiguity to
     the range (e.g. implied year), then it will start in the future.
     """
-    async def convert(self, ctx: commands.Context, argument: str):
+    async def convert(self, ctx: _commands.Context, argument: str):
         try:
-            return utils_dt.parse_daterange(argument, future=True)
+            return _utils_dt.parse_daterange(argument, future=True)
         except ValueError as e:
-            raise commands.BadArgument(e.args[0])
+            raise _commands.BadArgument(e.args[0])
 
 
-class DateRange(commands.Converter):
+class DateRange(_commands.Converter):
     """
     Convert a natural language date range, in the form "date1 to date2".
     """
-    async def convert(self, ctx: commands.Context, argument: str):
+    async def convert(self, ctx: _commands.Context, argument: str):
         try:
-            return utils_dt.parse_daterange(argument, future=False)
+            return _utils_dt.parse_daterange(argument, future=False)
         except ValueError as e:
-            raise commands.BadArgument(e.args[0])
+            raise _commands.BadArgument(e.args[0])
 
 
-class MemberConverter2(commands.Converter):
+class MemberConverter2(_commands.Converter):
     """
     Member converter with slightly more tolerant ID inputs permitted.
     """
-    async def convert(self, ctx: commands.Context, argument: str):
-        return get_member(ctx, argument)
+    async def convert(self, ctx: _commands.Context, argument: str):
+        return _get_member(ctx, argument)
 
 
-class BooleanConverter(commands.Converter):
+class BooleanConverter(_commands.Converter):
     """ Convert true/false words to boolean. """
     true_words = ['true', 'yes', '1', 'enabled', 'enable', 'on', 'y', 'ok', 'confirm']
     false_words = ['false', 'no', '0', 'disabled', 'disable', 'off', 'n', 'null', 'none', 'cancel']
 
-    async def convert(self, ctx: commands.Context, argument: str):
+    async def convert(self, ctx: _commands.Context, argument: str):
         arg = argument.lower()
         if arg in self.true_words:
             return True
         elif arg in self.false_words:
             return False
         else:
-            raise commands.BadArgument("{!r} is not a true/false word.".format(argument))
+            raise _commands.BadArgument("{!r} is not a true/false word.".format(argument))
 
 
-class NaturalInteger(commands.Converter):
+class NaturalInteger(_commands.Converter):
     """
     Integer converter that is tolerant of various natural number input conventions:
 
@@ -103,7 +103,7 @@ class NaturalInteger(commands.Converter):
     :raise commands.BadArgument: Cannot interpret as integer. This includes inputs that are detected
         as floating-point.
     """
-    async def convert(self, ctx: commands.Context, argument: str):
+    async def convert(self, ctx: _commands.Context, argument: str):
         n_str = argument.rstrip(',.').strip('#')
         try:
             return int(n_str)
@@ -116,14 +116,14 @@ class NaturalInteger(commands.Converter):
         if (len(commas_split) > 1 and len(periods_split) > 1)\
                 or (len(commas_split) == 2 and len(commas_split[1]) != 3)\
                 or (len(periods_split) == 2 and len(periods_split[1]) != 3):
-            raise commands.BadArgument("Parameter {!r} must be an integer, not a decimal number."
+            raise _commands.BadArgument("Parameter {!r} must be an integer, not a decimal number."
                 .format(n_str))
         if any(len(c) != 3 for c in commas_split[1:])\
                 or any(len(c) != 3 for c in periods_split[1:])\
                 or any(len(c) != 3 for c in n_str.split(' ')[1:]):
-            raise commands.BadArgument("Cannot convert {!r} to an integer.".format(n_str))
+            raise _commands.BadArgument("Cannot convert {!r} to an integer.".format(n_str))
 
         try:
             return int(n_str.replace(',', '').replace('.', '').replace(' ', ''))
         except ValueError:
-            raise commands.BadArgument("Cannot convert {!r} to an integer.".format(n_str))
+            raise _commands.BadArgument("Cannot convert {!r} to an integer.".format(n_str))

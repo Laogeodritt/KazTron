@@ -5,17 +5,16 @@ import sys
 from typing import List, Dict
 
 import discord
+from discord.ext import commands
 
 import kaztron
 from kaztron.config import SectionView
 from kaztron.errors import *
 from kaztron.help_formatter import DiscordHelpFormatter, JekyllHelpFormatter
 from kaztron.rolemanager import RoleManager
-from kaztron.utils.checks import mod_only, mod_channels
-from kaztron.utils.decorators import task_handled_errors
-from kaztron.utils.logging import message_log_str, exc_log_str, tb_log_str, exc_msg_str
-from kaztron.utils.discord import get_command_prefix, get_command_str, get_help_str, get_usage_str
+from kaztron.utils.cogutils import *
 from kaztron.utils.datetime import format_timestamp
+
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +22,7 @@ logger = logging.getLogger(__name__)
 class CoreConfig(SectionView):
     name: str
     extensions: List[str]
-    channel_request: discord.Channel
+    channel_request: discord.TextChannel
     info_links: Dict[str, str]
     date_format: str
     datetime_format: str
@@ -49,152 +48,13 @@ class CoreCog(kaztron.KazCog):
         - jekyllate
     """
 
+    config: CoreConfig
+
     def __init__(self, bot):
         super().__init__(bot, 'core')
-        self.cog_config = self.cog_config  # type: CoreConfig
-        self.cog_config.set_converters('channel_request', self.get_channel, lambda c: c.id)
-        self.name = self.cog_config.name
+        self.config.set_converters('channel_request', self.bot.validate_channel, lambda c: c.id)
 
         self.bot.event(self.on_error)  # register this as a global event handler, not just local
-        self.bot.add_check(self._check_bot_ready)
-        self.bot.before_invoke(self._before_invoke_log)
-        self.ready_cogs = set()
-        self.error_cogs = set()
-
-    def _check_bot_ready(self, ctx: commands.Context):
-        """ Check if bot is ready. Used as a global check. """
-        if ctx.cog is not None:
-            if ctx.cog in self.ready_cogs:
-                return True
-            elif ctx.cog in self.error_cogs:
-                raise BotCogError(type(ctx.cog).__name__)
-            else:
-                raise BotNotReady(type(ctx.cog).__name__)
-        elif self in self.ready_cogs or not isinstance(ctx.cog, kaztron.KazCog):
-            return True
-        else:
-            raise BotNotReady(type(self).__name__)
-
-    async def _before_invoke_log(self, ctx: commands.Context):
-        cmd_logger = logging.getLogger("kaztron.commands")
-        cmd_logger.info("{!s}: {}".format(self, message_log_str(ctx.message)))
-
-    def set_cog_ready(self, cog):
-        """
-        Called by the kaztron.KazCog base to signal it has executed its on_ready handler and is
-        ready to receive commands.
-        """
-        logger.info("Cog ready: {}".format(type(cog).__name__))
-        self.ready_cogs.add(cog)
-        if self.all_cogs_ready_or_error():
-            self._on_all_cogs_ready()
-
-    def set_cog_error(self, cog):
-        """
-        Called by the kaztron.KazCog base to signal that an error occurred during on_ready.
-        """
-        logger.error("Cog error: {}".format(type(cog).__name__))
-        self.error_cogs.add(cog)
-        if self.all_cogs_ready_or_error():
-            self._on_all_cogs_ready()
-
-    def set_cog_shutdown(self, cog):
-        logger.info("Cog has been shutdown: {}".format(type(cog).__name__))
-        self.ready_cogs.remove(cog)
-        if cog.state != self.state:  # not using global state (saving handled in runner)
-            cog.state.write()
-
-    def all_cogs_ready(self):
-        registered_cogs = {c for c in self.bot.cogs.values() if isinstance(c, kaztron.KazCog)}
-        return self.ready_cogs == registered_cogs
-
-    def all_cogs_ready_or_error(self):
-        registered_cogs = {c for c in self.bot.cogs.values() if isinstance(c, kaztron.KazCog)}
-        return self.ready_cogs.union(self.error_cogs) == registered_cogs
-
-    def _on_all_cogs_ready(self):
-        if not self.error_cogs:
-            logger.info("=== ALL COGS READY ===")
-        else:
-            logger.info("=== COG READY ERRORS: {:d} ===".format(len(self.error_cogs)))
-        self.bot.loop.create_task(self.prepare_command_help())
-        self.bot.loop.create_task(self.send_startup_message())
-
-    async def on_ready(self):
-        logger.debug("on_ready")
-
-        self.ready_cogs = set()  # #316, #317: RECONNECT op code doesn't re-__init__ corecog,
-        self.error_cogs = set()  # so reset these lists (assumption: Core Cog first to be ready)
-        await super().on_ready()
-
-        # set global variables (don't use export_kazhelp_vars - these are cog-local)
-        try:
-            self.bot.kaz_help_parser.variables['output_channel'] = '#' + self.channel_out.name
-            self.bot.kaz_help_parser.variables['test_channel'] = '#' + self.channel_test.name
-            self.bot.kaz_help_parser.variables['public_channel'] = '#' + self.channel_public.name
-        except AttributeError:
-            logger.warning("Help parser not found in bot")
-
-        await self.set_status_message()
-
-    async def set_status_message(self):
-        playing = self.config.discord.playing
-        if playing:
-            await self.bot.change_presence(activity=discord.Game(name=playing))
-
-    async def send_startup_message(self):
-        startup_info = (
-            "Bot name {}".format(self.name),
-            "KazTron version {}".format(kaztron.__version__),
-            "discord.py version {}".format(discord.__version__),
-            "Logged in as {} (id:{})".format(self.bot.user.name, self.bot.user.id),
-        )
-
-        for msg in startup_info:
-            logger.info(msg)  # for file logging
-
-        for msg in startup_info:  # Iterate again to keep these together in logs
-            print(msg)  # in case console logger is below INFO level - display startup info
-
-        try:
-            await self.send_output(
-                "**{} is running**\n".format(self.name) + '\n'.join(startup_info)
-            )
-        except discord.HTTPException:
-            logger.exception("Error sending startup information to output channel")
-
-    @task_handled_errors
-    async def prepare_command_help(self):
-        obj_list = set()
-        formatter = self.bot.formatter  # type: DiscordHelpFormatter
-
-        for cog_name, cog in self.bot.cogs.items():
-            if cog not in obj_list:
-                try:
-                    formatter.kaz_preprocess(cog, self.bot)
-                    obj_list.add(cog)
-                except Exception as e:
-                    raise discord.ClientException(
-                        "Error while parsing !kazhelp for cog {}".format(cog_name))\
-                        from e
-
-        for command in self.bot.walk_commands():
-            if command not in obj_list:
-                try:
-                    formatter.kaz_preprocess(command, self.bot)
-                    obj_list.add(command)
-                except Exception as e:
-                    raise discord.ClientException("Error while parsing !kazhelp for command {}"
-                        .format(command.qualified_name)) from e
-
-        logger.info("=== KAZHELP PROCESSED ===")
-
-    async def on_command_completion(self, command: commands.Command, ctx: commands.Context):
-        """ On command completion, save state files. """
-        for cog in self.bot.cogs.values():
-            if isinstance(cog, kaztron.KazCog):
-                # ok if same state object in multiple cogs - dirty flag prevents multiple writes
-                cog.state.write()
 
     async def on_error(self, event, *args, **kwargs):
         exc_info = sys.exc_info()
@@ -213,7 +73,7 @@ class CoreCog(kaztron.KazCog):
             ', '.join(key + '=' + repr(value) for key, value in kwargs.items()))
         logger.exception("Error occurred in " + log_msg)
         await self.send_output("[ERROR] In {}\n\n{}\n\nSee log for details".format(
-            log_msg, exc_log_str(exc_info[1])))
+            log_msg, logutils.exc_log_str(exc_info[1])))
 
         try:
             message = args[0]
@@ -247,7 +107,7 @@ class CoreCog(kaztron.KazCog):
         raised that isn't derived from CommandError will cause discord.py to raise
         a CommandInvokeError from it).
         """
-        cmd_string = message_log_str(ctx.message)
+        cmd_string = logutils.message_log_str(ctx.message)
         author_mention = ctx.message.author.mention + ' '
 
         if not force and hasattr(ctx.command, "on_error"):
@@ -283,7 +143,7 @@ class CoreCog(kaztron.KazCog):
                 err_msg = "Can't PM user (FORBIDDEN): {0} {1}".format(
                     author.nick or author.name, author.id)
                 logger.warning(err_msg)
-                logger.debug(tb_log_str(root_exc))
+                logger.debug(logutils.tb_log_str(root_exc))
                 await self.bot.send_message(ctx.message.channel,
                     ("{} You seem to have PMs from this server disabled or you've blocked me. "
                      "I need to be able to PM you for this command.").format(author.mention))
@@ -292,15 +152,15 @@ class CoreCog(kaztron.KazCog):
             elif isinstance(root_exc, discord.HTTPException):  # API errors
                 err_msg = 'While executing {c}\n\nDiscord API error {e!s}' \
                     .format(c=cmd_string, e=root_exc)
-                logger.error(err_msg + "\n\n{}".format(tb_log_str(root_exc)))
+                logger.error(err_msg + "\n\n{}".format(logutils.tb_log_str(root_exc)))
                 await self.send_output(
                     "[ERROR] " + err_msg + "\n\nSee log for details")
             else:
                 logger.error("An error occurred while processing the command: {}\n\n{}"
-                    .format(cmd_string, tb_log_str(root_exc)))
+                    .format(cmd_string, logutils.tb_log_str(root_exc)))
                 await self.send_output(
                     "[ERROR] While executing {}\n\n{}\n\nSee logs for details"
-                    .format(cmd_string, exc_log_str(root_exc)))
+                    .format(cmd_string, logutils.exc_log_str(root_exc)))
 
             # In all cases (except if return early/re-raise)
             await self.bot.send_message(ctx.message.channel, author_mention +
@@ -321,17 +181,17 @@ class CoreCog(kaztron.KazCog):
             logger.warning(err_msg)
             await self.send_output('[WARNING] ' + err_msg)
 
-            err_str = exc_msg_str(exc,
+            err_str = logutils.exc_msg_str(exc,
                 "Only moderators may use that command." if isinstance(exc, ModOnlyError)
                 else "Only administrators may use that command.")
             await self.bot.send_message(ctx.message.channel, author_mention + err_str)
 
         elif isinstance(exc, (UnauthorizedUserError, commands.CheckFailure)):
             logger.warning(
-                "Check failed on command: {!r}\n\n{}".format(cmd_string, tb_log_str(exc)))
+                "Check failed on command: {!r}\n\n{}".format(cmd_string, logutils.tb_log_str(exc)))
             await self.send_output('[WARNING] ' +
-                "Check failed on command: {!r}\n\n{}".format(cmd_string, exc_log_str(exc)))
-            err_str = exc_msg_str(exc,
+                "Check failed on command: {!r}\n\n{}".format(cmd_string, logutils.exc_log_str(exc)))
+            err_str = logutils.exc_msg_str(exc,
                 "*(Dev note: Implement error handler with more precise reason)*")
             await self.bot.send_message(ctx.message.channel, author_mention +
                 "You're not allowed to use that command: " + err_str)
@@ -340,7 +200,7 @@ class CoreCog(kaztron.KazCog):
             err_msg = "Unauthorised channel for this command: {!r}".format(cmd_string)
             logger.warning(err_msg)
             await self.send_output('[WARNING] ' + err_msg)
-            err_str = exc_msg_str(exc, "Command not allowed in this channel.")
+            err_str = logutils.exc_msg_str(exc, "Command not allowed in this channel.")
             await self.bot.send_message(ctx.message.channel,
                 author_mention + "You can't use that command here: " + err_str)
 
@@ -420,13 +280,13 @@ class CoreCog(kaztron.KazCog):
 
         elif isinstance(exc, commands.UserInputError):
             logger.warning("UserInputError: {}\n{}"
-                .format(cmd_string, tb_log_str(exc)))
+                .format(cmd_string, logutils.tb_log_str(exc)))
             await self.bot.send_message(ctx.message.channel,
                 '{} {}'.format(author_mention, exc.args[0]))
 
         else:
             logger.error("Unknown command exception occurred: {}\n\n{}"
-                .format(cmd_string, tb_log_str(exc)))
+                .format(cmd_string, logutils.tb_log_str(exc)))
             await self.bot.send_message(ctx.message.channel, author_mention +
                 "An unexpected error occurred! Details have been logged. Let a mod know so we can "
                 "investigate.")
@@ -435,7 +295,7 @@ class CoreCog(kaztron.KazCog):
                  "Error: {!s}\n\nSee logs for details").format(cmd_string, exc))
 
     @commands.command(pass_context=True)
-    @mod_only()
+    @checks.mod_only()
     async def info(self, ctx):
         """!kazhelp
 
@@ -514,8 +374,8 @@ class CoreCog(kaztron.KazCog):
                            "please feel free to contact the moderators.")
 
     @commands.command(pass_context=True)
-    @mod_only()
-    @mod_channels()
+    @checks.mod_only()
+    @checks.mod_channels()
     async def jekyllate(self, ctx: commands.Context):
         """!kazhelp
 

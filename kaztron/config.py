@@ -458,9 +458,9 @@ class SectionView:
         logger.debug("{!s}: Clearing converted value cache.".format(self))
         self.__cache.clear()
 
-    def write(self):
+    def write(self, log=True):
         """ If the in-memory cache of the config file is dirty, write to file. """
-        self.__config.write()
+        self.__config.write(log)
 
     def __str__(self):
         return "{!s}:{}".format(self.__config, self.__section)

@@ -6,7 +6,7 @@ import discord
 from discord.ext import commands
 
 import kaztron
-from kaztron import KazCog
+from kaztron import KazCog, KazClient
 from kaztron.config import get_kaztron_config, KaztronConfig, get_runtime_config
 from kaztron.discord_patches import apply_patches
 # from kaztron.help_formatter import CoreHelpParser, DiscordHelpFormatter
@@ -32,7 +32,6 @@ def run(loop: asyncio.AbstractEventLoop):
 
     config = get_kaztron_config()
     state = get_runtime_config()
-    kaztron.KazCog.static_init(config, state)
 
     # custom help formatters
     # kaz_help_parser = CoreHelpParser({
@@ -49,12 +48,15 @@ def run(loop: asyncio.AbstractEventLoop):
     intents.invites = False
 
     # create bot instance (+ some custom hacks)
-    client = commands.Bot(
+    client = KazClient(
+        config=config,
+        state=state,
+
         # Client arguments
         intents=intents,
         chunk_guilds_at_startup=True,
         status=discord.Status.idle,
-        activity=discord.CustomActivity("Starting up...", emoji=discord.PartialEmoji(name='⏱️')),
+        activity=discord.Game(" some startup boops..."),
         # disallow @everyone/@here by default; per-msg override via allowed_mentions param to send()
         allowed_mentions=discord.AllowedMentions(everyone=False),
 

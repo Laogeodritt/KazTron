@@ -1,5 +1,10 @@
 from discord.ext import commands
 
+__all__ = ('DiscordErrorCodes', 'BotNotReady', 'BotCogError', 'CogNotLoadedError',
+           'UnauthorizedUserError', 'ModOnlyError', 'AdminOnlyError', 'UnauthorizedChannelError',
+           'DeleteMessage')
+
+
 class DiscordErrorCodes:
     # https://discordapp.com/developers/docs/topics/opcodes-and-status-codes
     CANNOT_PM_USER = 50007

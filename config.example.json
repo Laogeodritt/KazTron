@@ -4,7 +4,16 @@
     "admin_roles": ["role 1", "role 2", "etc."],
     "mod_channels": ["channel ID 1", "channel ID 2", "these are channels where mod/non-public commands are allowed"],
     "admin_channels": ["channel ID 1", "channel ID 2", "admin-only channels (not automatically considered mod channels)"],
-    "playing": "status (playing ...) message here",
+    "status": [
+      {
+        "name": "Status text here. (Always prefixed by 'Playing ' for the time being... Emoji currently not supported - Discord limitation with bot accounts and custom statuses)",
+        "emoji": 123456789012345678
+      },
+      {
+        "name": "Second status text here.",
+        "emoji": "Unicode emoji character"
+      }
+    ],
     "token": "bot auth token",
     "channel_output": "channel ID for general bot messages (technical/audit mostly)",
     "channel_public": "channel ID for public bot usage and some status/notification messages to users",

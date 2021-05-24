@@ -11,6 +11,8 @@ from kaztron.utils.discord import check_mod, check_admin, check_role
 
 import logging
 
+__all__ = ('CheckId', 'has_role', 'mod_or_has_role', 'mod_only', 'admin_only', 'in_channels',
+           'in_channels_cfg', 'mod_channels', 'admin_channels', 'pm_only')
 logger = logging.getLogger('kaztron.checks')
 
 

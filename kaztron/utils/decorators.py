@@ -1,6 +1,27 @@
 import asyncio
 import functools
 
+from kaztron.errors import BotNotReady
+
+
+def ready_only(func):
+    """
+    Decorator for event handlers (like :meth:`on_member_join`). Not for use with commands (which
+    already have a global check for ready state).
+
+    Checks if the cog is ready, and if not, raises a :cls:`~kaztron.errors.BotNotReady` error.
+
+    There is no need to call this for commands, as the global check from the CoreCog will handle
+    this automatically.
+    """
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        if args[0].is_ready:
+            await func(*args, **kwargs)
+        else:
+            raise BotNotReady(type(args[0]).__name__)
+    return wrapper
+
 
 def error_handler(ErrorType, return_value):
     """

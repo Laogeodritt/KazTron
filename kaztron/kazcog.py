@@ -1,5 +1,4 @@
-from asyncio import iscoroutine
-from typing import Type, Dict, Union, Sequence, Callable, Any
+from typing import Type, Dict, Union, Sequence, Callable
 
 import functools
 import logging
@@ -50,23 +49,19 @@ class KazCog(commands.Cog):
                  config_section_name: str = None,
                  config_section_view: Type[SectionView] = None,
                  state_section_view: Type[SectionView] = None):
+        # dependencies
         self._bot = bot
+        self._cmd_logger = logging.getLogger("kaztron.commands")
+
+        # state variables
+        self._status = CogStatus.NONE  # type: CogStatus
+
+        # config stuff
         self._section = None  # type: str
         self._config = None  # type: SectionView
         self._state = None  # type: SectionView
         self._cogstate = None  # type: KaztronConfig
         self._setup_config(config_section_name, config_section_view, state_section_view)
-
-        self._status = CogStatus.NONE  # type: CogStatus
-
-        self._cmd_logger = logging.getLogger("kaztron.commands")
-
-        # wrappers allow for cogs to define event handlers without calling super().on_*()
-        self.__wrap_event('connect', self._on_connect_wrapper)
-        self.__wrap_event('ready', self._on_ready_wrapper)
-        self.bot.before_invoke(self._before_invoke_log_command)
-        self.__wrap_event('command_completion', self._on_command_completion_wrapper)
-        self.__wrap_event('disconnect', self._on_disconnect_wrapper)
 
     def _setup_config(self,
                       section: str,
@@ -150,40 +145,26 @@ class KazCog(commands.Cog):
         """ Check if the cog encountered an error while processing the ``on_ready`` event. """
         return self._status == CogStatus.ERR_READY
 
-    async def __wrap_event(self, event: str, wrapper: Callable):
-        event_meth = 'on_' + event
-        try:
-            functools.update_wrapper(wrapper, getattr(self, event_meth))
-            setattr(self, event_meth, functools.partial(wrapper, getattr(self, event_meth)))
-        except AttributeError:
-            def noop(*_, **__):
-                pass
-            setattr(self, event_meth, functools.partial(wrapper, noop))
-
-    async def _on_connect_wrapper(self, f: Callable):
-        """ Wrapper for 'connect' events. Resets the status to INIT. See #316, #317. """
-        await f()
+    @commands.Cog.listener('on_connect')
+    async def on_connect_set_status(self):
+        """ Resets the status to INIT (see #316, #317) and clear config converter caches. """
         self._status = CogStatus.INIT
-
-    async def _on_ready_wrapper(self, f: Callable):
-        """
-        Wrapper for 'ready' event. Clears KaztronConfig caches, wraps the cog's on_ready with
-         exception handling, and notifies bot
-        """
-        logger.debug(f"{self.qualified_name}: on_ready")
         if self.config:
             self.config.clear_cache()
         if self.state:
             self.state.clear_cache()
 
+    @commands.Cog.listener('on_ready')
+    async def _on_ready_init(self):
         try:
-            await f()
-        except Exception:
+            self._on_ready_validate_config_converters()
+            await self.on_ready_validate()
+        except Exception as e:
             self._status = CogStatus.ERR_READY
-            logger.error(f"Cog error in 'on_ready' event: {self.qualified_name}")
-            await self.bot.channel_out.send(
-                f"[ERROR] Cog error in `on_ready()` event: {self.qualified_name}"
-            )
+            logger.exception("Error in on_ready event: validation error")
+            await self.bot.channel_out.send("[ERROR] Error loading cog {}: {}".format(
+                self.qualified_name, logutils.exc_msg_str(e)
+            ))
             raise
         else:
             self._status = CogStatus.READY
@@ -191,25 +172,52 @@ class KazCog(commands.Cog):
         finally:
             self.bot.notify_cog_ready(self)
 
-    async def _on_disconnect_wrapper(self, f: Callable):
+    def _on_ready_validate_config_converters(self):
+        for key in self.config.converter_keys():
+            self.config.get(key)
+        for key in self.state.converter_keys():
+            self.state.get(key)
+        logger.debug("Configuration converters validated.")
+
+    async def on_ready_validate(self):
+        """
+        This method does any needed initialisation and validation of the cog at ``on_ready`` time.
+        It should be overridden by subclasses needing to do such validation.
+
+        If init/validation fails, this method must raise an exception. This signals to the cog to
+        remain in a disabled state.
+
+        In the case that initialisation steps need to be taken at ``on_ready`` time and failure of
+        these steps is unlikely or doesn't need for the cog to remain disabled, it may be preferable
+        to define an ``on_ready`` listener instead.
+
+        KazCog will, by default, always FIRST test :attr:`config` and :attr:`state` converters as a
+        means of validating configuration, and consider validation to have failed if a converter
+        raises an error. It is not necessary to test these in the subclass. However, other
+        validation of the config/state may be performed. For this validation to work, converters
+        must be set BEFORE ``on_ready`` (e.g. in ``__init__()`` or ``on_connect``.
+        """
+        pass
+
+    @commands.Cog.listener('on_disconnect')
+    async def on_disconnect_cleanup_cogstate(self):
         if self.cogstate:
             self.cogstate.write(True)
+        self._status = CogStatus.SHUTDOWN
 
-        try:
-            await f()
-        finally:
-            self._status = CogStatus.SHUTDOWN
+    @commands.Cog.listener('on_command_completion')
+    async def on_command_completion_save_cogstate(self, _: commands.Context):
+        """ On command completion, save cog-local state file. """
+        if self.cogstate:
+            self.cogstate.write(False)
 
-    async def _before_invoke_log_command(self, ctx: commands.Context):
+    async def cog_before_invoke(self, ctx: commands.Context):
+        """
+        Cog-local pre-invoke hook. This base implementation logs all commands.
+
+        :param ctx: Context.
+        """
         self._cmd_logger.info("{!s}: {}".format(self, logutils.message_log_str(ctx.message)))
-
-    async def _on_command_completion_wrapper(self, f: Callable, ctx: commands.Context):
-        """ On command completion, save state files. """
-        try:
-            await f(ctx)
-        finally:
-            if self.cogstate:
-                self.cogstate.write(False)
 
     def export_kazhelp_vars(self) -> Dict[str, str]:
         """
@@ -252,7 +260,6 @@ class KazCog(commands.Cog):
         :param split: What to split on: 'word' or 'line'. 'Line' should only be used for messages
             known to contain many line breaks, as otherwise auto-splitting is likely to fail.
         """
-
         # prepare text contents
         if not contents or not auto_split:
             content_chunks = (contents,)
@@ -286,3 +293,5 @@ class KazCog(commands.Cog):
         for embed_chunk in embed_list[1:]:
             msg_list.append(await self.bot.send_message(destination, tts=tts, embed=embed_chunk))
         return tuple(msg_list)
+
+

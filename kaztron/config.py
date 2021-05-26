@@ -3,7 +3,7 @@ import logging
 import errno
 import copy
 from collections import OrderedDict
-from typing import Type, Dict, Tuple, Sequence, Callable, Any
+from typing import Type, Dict, Tuple, Sequence, Callable, Any, Generator
 
 from kaztron.driver.atomic_write import atomic_write
 
@@ -386,8 +386,8 @@ class SectionView:
         * ``def set_converter(any_value) -> json_serializable_value``
 
         :param key: The key to apply the converter to
-        :param get_converter: The converter to be used when retrieving data.
-        :param set_converter: The converter to be used when setting data.
+        :param get_converter: The converter to be used when retrieving data. None to disable.
+        :param set_converter: The converter to be used when setting data. None to disable.
         """
         if get_converter is not None and not callable(get_converter):
             raise ValueError("Get converter must be callable")
@@ -396,6 +396,12 @@ class SectionView:
         if key in self.__cache:  # clear converted cache
             del self.__cache[key]
         self.__converters[key] = (get_converter, set_converter)
+
+    def converter_keys(self) -> Generator[str]:
+        """ Returns config keys with configured converters (either or both get or set). """
+        for key, converters in self.__converters.items():
+            if converters != (None, None):
+                yield key
 
     def set_defaults(self, **kwargs):
         """

@@ -9,8 +9,6 @@ import kaztron
 from kaztron import KazCog, KazClient
 from kaztron.config import get_kaztron_config, KaztronConfig, get_runtime_config
 from kaztron.discord_patches import apply_patches
-# from kaztron.help_formatter import CoreHelpParser, DiscordHelpFormatter
-from kaztron.scheduler import Scheduler
 
 __all__ = ('ErrorCodes', 'run', 'get_daemon_context')
 logger = logging.getLogger("kaztron.bootstrap")
@@ -33,11 +31,6 @@ def run(loop: asyncio.AbstractEventLoop):
     config = get_kaztron_config()
     state = get_runtime_config()
 
-    # custom help formatters
-    # kaz_help_parser = CoreHelpParser({
-    #     'name': config.core.get('name')
-    # })
-
     # intents
     intents = discord.Intents.default()
     intents.members = True
@@ -50,7 +43,7 @@ def run(loop: asyncio.AbstractEventLoop):
     # create bot instance (+ some custom hacks)
     client = KazClient(
         config=config,
-        state=state,
+        client_state=state,
 
         # Client arguments
         intents=intents,
@@ -68,10 +61,6 @@ def run(loop: asyncio.AbstractEventLoop):
         # help_command=
         )
     apply_patches(client)
-
-    # KazTron-specific extension classes
-    client.scheduler = Scheduler(client)
-    # client.kaz_help_parser = kaz_help_parser
 
     # Load core extension (core + rolemanager)
     client.load_extension("kaztron.core")

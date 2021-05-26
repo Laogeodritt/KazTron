@@ -10,6 +10,9 @@ import kaztron
 from kaztron import KazCog
 from kaztron.errors import *
 from kaztron.config import KaztronConfig
+from kaztron.help_formatter import CoreHelpParser, DiscordHelpFormatter
+from kaztron.scheduler import Scheduler
+
 from kaztron.utils.decorators import task_handled_errors
 
 
@@ -41,6 +44,12 @@ class KazClient(commands.Bot):
 
         self.add_check(self._command_check_ready)
 
+        self._scheduler = Scheduler(self)
+
+        # self.kaz_help_parser = CoreHelpParser({
+        #     'name': self.config.core.get('name')
+        # })
+
     @property
     def config(self):
         """ Global client read-only configuration. """
@@ -56,6 +65,11 @@ class KazClient(commands.Bot):
         """ Shortcut to access the core KazTron cog. """
         from kaztron.core import CoreCog  # for type annotation/IDE inference
         return self.get_cog('CoreCog')  # type: CoreCog
+
+    @property
+    def scheduler(self):
+        """ Bot's task scheduler. """
+        return self._scheduler
 
     @property
     def rolemanager(self):

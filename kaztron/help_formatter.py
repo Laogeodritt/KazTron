@@ -125,7 +125,7 @@ class CoreHelpParser:
     cmd_fields = {'description', 'jekyll_description', 'brief', 'details',
                   'parameters', 'examples', 'users', 'channels'}
     blocks = ('IMPORTANT', 'WARNING', 'NOTE', 'TIP')
-    var_re = re.compile('{{\s*([A-Za-z0-9_-]+)\s*}}')
+    var_re = re.compile(r'{{\s*([A-Za-z0-9_-]+)\s*}}')
     tags_re = re.compile(r'^\s*(' + '|'.join(blocks) + r'): (.*)$', re.S)
     links_re = re.compile(r'{{\s*([!%])\s*(.*?)\s*}}')
 

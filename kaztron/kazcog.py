@@ -9,11 +9,7 @@ from discord.ext import commands
 
 from kaztron import KazClient
 from kaztron.config import KaztronConfig, SectionView
-from kaztron.utils.discord import Limits
-from kaztron.utils.embeds import EmbedSplitter
 from kaztron.utils import logging as logutils
-
-from kaztron.utils import cogutils
 
 logger = logging.getLogger(__name__)
 
@@ -231,67 +227,3 @@ class KazCog(commands.Cog):
         :return: variable name -> value
         """
         return {}
-
-    async def send_message(self, destination, contents=None, *, tts=False,
-                           embed: Union[discord.Embed, EmbedSplitter] = None,
-                           auto_split=True, split='word') -> Sequence[discord.Message]:
-        """
-        Send a message. This method wraps the :meth:`discord.Client.send_message` method and adds
-        automatic message splitting if a message is too long for one line.
-
-        No parsing of Markdown is done for message splitting; this behaviour may break intended
-        formatting. For messages which may contain formatting, it is suggested you parse and split
-        the message instead of relying on auto-splitting.
-
-        See also :meth:`kaztron.utils.split_chunks_on` and :meth:`kaztron.utils.natural_split` for
-        manual control of splitting behaviour. See also :meth:`kaztron.utils.split_code_chunks_on`
-        for splitting Markdown code blocks manually.
-
-        See also :cls:`kaztron.utils.embeds.EmbedSplitter` for similar functionality in splitting
-        embeds.
-
-        :param destination: he location to send the message (Channel, PrivateChannel, User, etc.)
-        :param contents: The content of the message to send. If this is missing, then the ``embed``
-            parameter must be present.
-        :param tts: Indicates if the message should be sent using text-to-speech.
-        :param embed: The rich embed for the content. Also accepts EmbedSplitter instances, for
-            automatic splitting - in this case, the EmbedSplitter will be finalized by this method.
-        :param auto_split: Whether to auto-split messages that exceed the maximum message length.
-        :param split: What to split on: 'word' or 'line'. 'Line' should only be used for messages
-            known to contain many line breaks, as otherwise auto-splitting is likely to fail.
-        """
-        # prepare text contents
-        if not contents or not auto_split:
-            content_chunks = (contents,)
-        else:
-            if split == 'word':
-                content_chunks = cogutils.strutils.natural_split(contents, Limits.MESSAGE)
-            elif split == 'line':
-                content_chunks = cogutils.strutils.split_chunks_on(
-                    contents, Limits.MESSAGE, split_char='\n')
-            else:
-                raise ValueError('`split` argument must be \'word\' or \'line\'')
-
-        # prepare embed
-        try:
-            embed_list = embed.finalize()
-        except AttributeError:
-            embed_list = (embed,)
-
-        # strategy: output all text chunks before starting to output embed chunks
-        # so the last text chunk will have the first embed chunk attached
-        # this is because non-split messages usually have the embed appear after the msg -
-        # should be fairly rare for both msg and embed to be split
-        msg_list = []
-        for content_chunk in content_chunks[:-1]:
-            msg_list.append(await self.bot.send_message(destination, content_chunk, tts=tts))
-
-        msg_list.append(await self.bot.send_message(
-            destination, content_chunks[-1], tts=tts, embed=embed_list[0]
-        ))
-
-        for embed_chunk in embed_list[1:]:
-            msg_list.append(await self.bot.send_message(destination, tts=tts, embed=embed_chunk))
-        return tuple(msg_list)
-
-

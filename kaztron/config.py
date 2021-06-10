@@ -1,13 +1,16 @@
-import json
 import logging
 import errno
 import copy
-from collections import OrderedDict
-from typing import Type, Dict, Tuple, Sequence, Callable, Any, Generator
+from typing import Type, Dict, Tuple, Callable, Any, Generator, Union
+from munch import Munch
 
 from kaztron.driver.atomic_write import atomic_write
 
 logger = logging.getLogger("kaztron.config")
+
+
+ChannelConfig = Union[str, int]
+RoleConfig = Union[str, int]
 
 
 class ConfigError(Exception):
@@ -52,6 +55,34 @@ class ConfigConverterError(ConfigError):
         return "Error in converter for configuration: {}".format(self._get_config_info())
 
 
+class JsonFileStrategy:
+    def __init__(self, filename):
+        self.filename = filename
+
+    def read(self):
+        import json
+        with open(self.filename) as file:
+            return json.load(file)
+
+    def write(self, data):
+        import json
+        with atomic_write(self.filename) as file:
+            return json.dump(data, file)
+
+
+class TomlReadOnlyStrategy:
+    def __init__(self, filename):
+        self.filename = filename
+
+    def read(self):
+        import tomli
+        with open(self.filename) as file:
+            tomli.load(file)
+
+    def write(self, _):
+        raise NotImplementedError
+
+
 class KaztronConfig:
     """
     Simple interface for KazTron configuration files. This class uses JSON as
@@ -87,18 +118,25 @@ class KaztronConfig:
         ``bool`` - Whether the config file is read-only. If true, disables :meth:`~.write()` and
         :meth:`~.set`. Read-only property.
     """
-    def __init__(self, filename="config.json", defaults=None, read_only=False):
-        if defaults is None:
-            defaults = {}
-        self.filename = filename
-        self._data = {}
+    def __init__(self, filename="config.json", file_strategy=JsonFileStrategy,
+                 defaults=None, read_only=False):
+        self._file_strategy = file_strategy(filename)
+        self._data = Munch()
         self._defaults = {}
         self._read_only = read_only
         self._section_view_map = {}
         self.is_dirty = False
         self.read()
-        for section, s_data in defaults.items():
+        for section, s_data in defaults.items() if defaults else {}:
             self.set_defaults(section, **s_data)
+
+    @property
+    def filename(self):
+        return self.filename
+
+    @filename.setter
+    def filename(self, value):
+        self._file_strategy.filename = value
 
     @property
     def read_only(self):
@@ -112,10 +150,9 @@ class KaztronConfig:
         :raises ConfigNameError: Invalid key name in file
         """
         logger.info("config({}) Reading file...".format(self.filename))
-        self._data = {}
+        self._data = Munch()
         try:
-            with open(self.filename) as cfg_file:
-                read_data = json.load(cfg_file, object_pairs_hook=OrderedDict)
+            read_data = self._file_strategy.read()
         except OSError as e:
             if e.errno == errno.ENOENT:  # file not found, just create it
                 if not self._read_only:
@@ -126,7 +163,7 @@ class KaztronConfig:
             else:  # other failures should bubble up
                 raise
         else:
-            self._data.update(read_data)
+            self._data.update(Munch.fromDict(read_data))
             self.is_dirty = False
 
         for section, sdata in self._data.items():
@@ -148,8 +185,7 @@ class KaztronConfig:
         if self.is_dirty:
             if log:
                 logger.info("config({}) Writing file...".format(self.filename))
-            with atomic_write(self.filename) as cfg_file:
-                json.dump(self._data, cfg_file)
+            self._file_strategy.write(self._data)
             self.is_dirty = False
 
     def set_section_view(self, section: str, cls: Type['SectionView']):
@@ -277,7 +313,7 @@ class KaztronConfig:
             section_data = self._data[section]
         except KeyError:
             logger.debug("Section {!r} not found: creating new section".format(section))
-            section_data = self._data[section] = {}
+            section_data = self._data[section] = Munch()
 
         section_data[key] = copy.deepcopy(value)
         self.is_dirty = True
@@ -460,7 +496,7 @@ class SectionView:
         return self.__config.get_section_data(self.__section).keys()
 
     def clear_cache(self):
-        """ Clear the converted value cache. """
+        """ Clear the converted value cache. This is recursive on any contained SectionViews. """
         logger.debug("{!s}: Clearing converted value cache.".format(self))
         self.__cache.clear()
 
@@ -502,8 +538,15 @@ def get_kaztron_config(defaults=None) -> KaztronConfig:
     Get the static configuration object for the bot. Constructs the object if needed.
     """
     global _kaztron_config
+    import os
     if not _kaztron_config:
-        _kaztron_config = KaztronConfig(defaults=defaults, read_only=True)
+        try:
+            _kaztron_config = KaztronConfig("config.toml", file_strategy=TomlReadOnlyStrategy,
+                                            defaults=defaults, read_only=True)
+        except FileNotFoundError as e:
+            # legacy config.json file
+            _kaztron_config = KaztronConfig("config.json", file_strategy=JsonFileStrategy,
+                                            defaults=defaults, read_only=True)
     return _kaztron_config
 
 
@@ -514,5 +557,5 @@ def get_runtime_config() -> KaztronConfig:
     """
     global _runtime_config
     if not _runtime_config:
-        _runtime_config = KaztronConfig("state.json")
+        _runtime_config = KaztronConfig("state.json", file_strategy=JsonFileStrategy)
     return _runtime_config

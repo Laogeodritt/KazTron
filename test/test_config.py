@@ -1,5 +1,4 @@
 import functools
-from collections import OrderedDict
 from unittest.mock import mock_open, Mock, MagicMock
 
 import pytest
@@ -29,7 +28,7 @@ config_data = {
     'discord': {
         'playing': 'status',
         'limit': 5,
-        'structure': OrderedDict([('a', 1), ('b', 2), ('c', 3)])
+        'structure': {'a': 1, 'b': 2, 'c': 3}
     }
 }
 
@@ -67,7 +66,7 @@ def write_test(func):
 @pytest.fixture(params=[True, False])
 def config(request, mocker) -> ConfigFixture:
     f = ConfigFixture()
-    f.mock_load = mocker.patch('json.load', return_value=OrderedDict(config_data))
+    f.mock_load = mocker.patch('json.load', return_value=config_data)
     f.mock_dump = mocker.patch('json.dump')
     f.mock_open = mocker.patch('builtins.open', mock_open())
     f.mock_atomic_write = mocker.patch('kaztron.driver.atomic_write', mock_open())
@@ -85,6 +84,7 @@ def section_view() -> SectionFixture:
     # noinspection PyTypeChecker
     f.section = SectionView(f.mock_config, 'section')
     return f
+
 
 @pytest.fixture
 def section_view_with_config(config) -> SectionFixture:
@@ -105,18 +105,18 @@ class TestConfig:
         config.mock_open.assert_called_once_with('test.json')
 
     def test_underscore_section_protection(self, mocker):
-        mocker.patch('json.load', return_value=OrderedDict({
+        mocker.patch('json.load', return_value={
             'core': {'a': 1, 'b': 2, 'c': 3},
             '_illegal': {'d': 4, 'e': 5}
-        }))
+        })
         mocker.patch('builtins.open', mock_open())
         with pytest.raises(ConfigNameError):
             KaztronConfig(filename='test.json', defaults=config_defaults, read_only=False)
 
     def test_underscore_key_protection(self, mocker):
-        mocker.patch('json.load', return_value=OrderedDict({
+        mocker.patch('json.load', return_value={
             'core': {'a': 1, 'b': 2, '_illegal': 1024, 'c': 3}
-        }))
+        })
         mocker.patch('builtins.open', mock_open())
         with pytest.raises(ConfigNameError):
             KaztronConfig(filename='test.json', defaults=config_defaults, read_only=False)
@@ -128,8 +128,7 @@ class TestConfig:
     def test_get_real_values(self, config: ConfigFixture):
         assert config.config.get('discord', 'playing') == 'status'
         assert config.config.get('discord', 'limit') == 5
-        assert config.config.get('discord', 'structure') == \
-            OrderedDict([('a', 1), ('b', 2), ('c', 3)])
+        assert config.config.get('discord', 'structure') == {'a': 1, 'b': 2, 'c': 3}
 
     def test_get_real_values_with_defaults(self, config: ConfigFixture):
         assert config.config.get('core', 'name') == 'ConfigTest'
@@ -272,7 +271,7 @@ class TestConfigObjectApi:
         section_view.section.set_converters('name', lambda x: '_' + x, lambda x: x[1:])
         section_view.section.set_converters('flamingo', lambda x: x + '0', lambda x: x[:-1])
 
-        def get(section, key, default=None, converter=None):
+        def get(_section, _key, _default=None, converter=None):
             if converter is None:
                 def identity_converter(x):
                     return x
@@ -305,18 +304,18 @@ class TestConfigObjectApi:
         class Dummy:  # just for identity checking
             pass
 
-        def get_converter(x):
+        def get_converter(_):
             return Dummy()
 
-        def get_converter2(x):
+        def get_converter2(_):
             return Dummy()
 
-        def set_converter(x):
+        def set_converter(_):
             return 0
 
         section_view.section.set_converters('test', get_converter, set_converter)
 
-        def get(section, key, default=None, converter=None):
+        def get(_section, _key, _default=None, converter=None):
             if converter is None:
                 def identity_converter(x):
                     return x

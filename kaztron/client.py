@@ -10,7 +10,7 @@ import kaztron
 from kaztron import KazCog
 from kaztron.errors import *
 from kaztron.config import KaztronConfig
-from kaztron.help_formatter import CoreHelpParser, DiscordHelpFormatter
+# from kaztron.help_formatter import CoreHelpParser, DiscordHelpFormatter
 from kaztron.scheduler import Scheduler
 
 from kaztron.utils.decorators import task_handled_errors
@@ -32,9 +32,13 @@ class KazClient(commands.Bot):
     def __init__(self, *args, config: KaztronConfig, client_state: KaztronConfig, **kwargs):
         """ Create the client. Takes the same keyword args as :cls:`commands.Bot` and
          :cls:`discord.Client`, in addition to those described below. """
-        super().__init__(*args, **kwargs)
+
         self._config = config
         self._state = client_state
+
+        if 'description' not in kwargs:
+            kwargs['description'] = self.config.get('core', 'description')
+        super().__init__(*args, **kwargs)
 
         self._ch_out = None  # type: discord.TextChannel
         self._ch_test = None  # type: discord.TextChannel
@@ -114,9 +118,9 @@ class KazClient(commands.Bot):
         logger.info("*** Disconnected.")
 
     async def on_ready(self):
-        self._ch_out = self.validate_channel(id=self.config.discord.channel_output)
-        self._ch_test = self.validate_channel(id=self.config.discord.channel_test)
-        self._ch_pub = self.validate_channel(id=self.config.discord.channel_public)
+        self._ch_out = self.validate_channel(id=self.config.core.discord.channel_output)
+        self._ch_test = self.validate_channel(id=self.config.core.discord.channel_test)
+        self._ch_pub = self.validate_channel(id=self.config.core.discord.channel_public)
 
         # TODO: help
         # set global variables for help parser
@@ -193,31 +197,32 @@ class KazClient(commands.Bot):
         else:
             return True
 
-    def validate_channel(self, *, id: int = None, name: str = None) -> AnyChannel:
+    def validate_channel(self, *, x: Union[int, str]) -> AnyChannel:
         """
-        Get a channel by ID.
+        Get a channel by name or ID.
 
-        Same as :meth:`discord.Client.get_channel`, but raises ValueError if the channel is not
-        found. Designed as a convenience function when one wants an unknown channel to be handled
-        by exception handling rather than an error value, e.g. to validate configurations in a cog's
-        `on_ready` method.
+        Similar to :meth:`discord.Client.get_channel`, but raises ValueError if not found.
         """
-        if id:
-            ch = self.guild.get_role(id)
+        if isinstance(x, int):
+            ch = self.guild.get_channel(x)
         else:
-            ch = discord.utils.get(self.guild.channels, name=name)
+            ch = discord.utils.get(self.guild.channels, name=x)
         if ch is None:
-            raise ValueError("Role {} not found".format(id if id else f"'{name}'"))
+            raise ValueError("Channel {} not found".format(x if isinstance(x, int) else f"'#{x}'"))
         return ch
 
-    def validate_role(self, *, id: int = None, name: str = None) -> discord.Role:
-        """ Get a role by name or ID, and raise ValueError if not found. """
-        if id:
-            role = self.guild.get_role(id)
+    def validate_role(self, *, x: Union[int, str]) -> discord.Role:
+        """
+        Get a role by name or ID.
+
+        Similar to :meth:`discord.Client.get_role`, but raises ValueError if not found.
+        """
+        if x:
+            role = self.guild.get_role(x)
         else:
-            role = discord.utils.get(self.guild.roles, name=name)
+            role = discord.utils.get(self.guild.roles, name=x)
         if role is None:
-            raise ValueError("Role {} not found".format(id if id else f"'{name}'"))
+            raise ValueError("Role {} not found".format(x if isinstance(x, int) else f"'{x}'"))
         return role
 
     @task_handled_errors

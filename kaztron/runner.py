@@ -6,7 +6,7 @@ import discord
 from discord.ext import commands
 
 import kaztron
-from kaztron import KazCog, KazClient
+from kaztron import KazClient
 from kaztron.config import get_kaztron_config, KaztronConfig, get_runtime_config
 from kaztron.discord_patches import apply_patches
 
@@ -55,7 +55,6 @@ def run(loop: asyncio.AbstractEventLoop):
 
         # Bot arguments
         command_prefix='.',
-        description=config.get('core', 'description'),
         pm_help=True,
         # formatter=DiscordHelpFormatter(kaz_help_parser, show_check_failure=True)
         # help_command=
@@ -110,7 +109,6 @@ def run(loop: asyncio.AbstractEventLoop):
         except Exception:
             pass
         # END CONTRIB
-        KazCog.state.write()
 
 
 def get_daemon_context(config: KaztronConfig):

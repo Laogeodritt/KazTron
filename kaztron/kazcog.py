@@ -1,6 +1,5 @@
-from typing import Type, Dict, Union, Sequence, Callable
+from typing import Type, Dict
 
-import functools
 import logging
 from enum import Enum
 

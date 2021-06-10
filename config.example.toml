@@ -1,0 +1,100 @@
+[core]
+# Internal name. May show up in bot output messages and help. Does not affect Discord nickname.
+name = "KazTron Example Bot"
+
+# This description shows up in the `.help` message.
+description = "An example bot."
+
+# Extensions to load: corresponds to package names within the kaztron.cogs package. At this time,
+# there is no way to load extensions from other packages.
+# extensions = [
+#    "dice",     "discordtools",      "fuck",
+#    "modnotes", "modnotes.bantools", "modnotes.jointools", "modtools",
+#    "quotedb",  "reminder",          "resource_channel",   "spotlight",
+#    "sprint",   "sticky",            "test",               "userstats",
+#    "voicelog", "welcome",           "wordfilter",
+#]
+extensions = []
+
+# Links to display in the `.info` command output. These are PUBLIC links.
+info_links = [
+    { name = "Google", url = "https://google.ca" },
+]
+
+# For datetime representations in KazTron messages, e.g., timestamps.
+# https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes
+[core.formats]
+date = "%Y-%m-%d"
+datetime = "%Y-%m-%d %H:%M"
+datetime_seconds = "%Y-%m-%d %H:%M:%S"
+
+
+[core.daemon]
+
+# Daemon mode, only supported on Linux. Useful for bots that are intended to be run on a server
+# continuously: this will ensures it runs continuously in the background (not tied to a session),
+# and allows for running in a service user/group context for higher security.
+
+enabled = true
+pidfile = "kaztron.pid"
+
+# When run in daemon mode, the process will switch to this user/group immediately upon spawning.
+user = "kaztron-user"
+group = "kaztron-group"
+
+# Pre-daemonization log.
+log = "daemon.log"
+
+
+[core.discord]
+
+# Bot auth token. (Careful not to share this or accidentally check this file into source control!)
+token = "asdfjkl;"
+
+# Global channels. Can be specified by channel ID or by name.
+# - Output channel is used for bot logs and moderator outputs. For example, errors and unauthorized
+#   commands are logged here; the "welcome" extension also logs user joins/parts here for mod use.
+# - Public channel is a dedicated channel for public bot use, as well as the place where the bot can
+#   communicate certain messages to users (for example, if an error occurs because the bot cannot
+#   DM the user).
+channel_output = 0123456789012345678
+channel_public = 0123456789012345678
+
+# Channel ID for `.issue` reports. Can be specified by channel ID or by name.
+channel_issues = 123456789012345678
+
+# Moderator and bot administrator roles. Can be specified by role ID or by name.
+mod_roles = [ 123456789012345678, "mod role name" ]
+admin_roles = [ 123456789012345678, "admin role name" ]
+
+# Moderator-only and admin-only channels. Can be specified by role ID or by name.
+# Admin channels are not automatically considered mod channels.
+mod_channels = [ 123456789012345678, "mod-channel-name" ]
+admin_channels = [ 123456789012345678, "admin-channel-name" ]
+
+# "Playing..." status in the bot user's profile. A random status is selected at startup.
+# Emoji can be a custom emoji ID or a Unicode emoji character.
+status = [
+    { name = "beep-boop sounds", emoji = 123456789012345678 },
+    { name = "with your hats", emoji = "👒" },
+]
+
+
+[logging]
+file = "kaztron.log"
+level = "INFO"
+
+# For log rotation purposes: max size of a single log file, and max number of old log files to keep.
+max_size_kb = 0
+max_backups = 0
+gzip_backups = true
+
+[logging.tags]
+# Python logging level overrides for specific tags. Use to fine-tune what gets logged.
+# The below values are already defaults and need not be specified. They are given as examples only.
+# "discord" = "INFO"
+# "websockets.protocol" = "INFO"
+# "kaztron.config" = "INFO"
+# "kaztron.help_formatter" = "INFO"
+# "sqlalchemy.engine" = "WARNING"
+# "asyncprawcore" = "INFO"

@@ -67,7 +67,7 @@ def patch_smart_quotes(client: commands.Bot):
     }
 
     @functools.wraps(client.process_commands)
-    async def new_process_commands(self, message, *args, **kwargs):
+    async def new_process_commands(_self, message):
         for f, r in conversion_map.items():
             message.content = message.content.replace(f, r)
         return await old_process_commands(message)

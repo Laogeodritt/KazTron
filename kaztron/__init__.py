@@ -22,11 +22,14 @@ cfg_defaults = {
         "name": "UnnamedBot",
         "description": None,
         "extensions": [],
+        "extensions_external": [],
         "data_dir": "",
         "info_links": [],
-        "date_format": "%Y-%m-%d",
-        "datetime_format": "%Y-%m-%d %H:%M",
-        "datetime_seconds_format": "%Y-%m-%d %H:%M:%S",
+        "formats": {
+            "date": "%Y-%m-%d",
+            "datetime": "%Y-%m-%d %H:%M",
+            "datetime_seconds": "%Y-%m-%d %H:%M:%S",
+        },
         "daemon": {
             "enabled": False,
             "pidfile": "kaztron.pid",
@@ -39,7 +42,7 @@ cfg_defaults = {
             "admin_roles": [],
             "mod_channels": [],
             "admin_channels": [],
-            "status": []
+            "status": [],
         },
     },
     "logging": {

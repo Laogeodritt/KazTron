@@ -65,14 +65,24 @@ def run(loop: asyncio.AbstractEventLoop):
     client.load_extension("kaztron.core")
 
     # Load extensions
-    startup_extensions = config.get("core", "extensions")
+    startup_extensions = config.get("core", "extensions", default=tuple())
     for extension in startup_extensions:
-        logger.debug("Loading extension: {}".format(extension))
+        logger.debug(f"Loading extension: '{extension}'")
         # noinspection PyBroadException
         try:
             client.load_extension("kaztron.cog." + extension)
         except Exception:
-            logger.exception('Failed to load extension {}'.format(extension))
+            logger.exception(f"Failed to load extension '{extension}'")
+            sys.exit(ErrorCodes.EXTENSION_LOAD)
+
+    external_extensions = config.get("core", "extensions_external", default=tuple())
+    for extension in external_extensions:
+        logger.debug(f"Loading external extension: {extension}")
+        # noinspection PyBroadException
+        try:
+            client.load_extension(extension)
+        except Exception:
+            logger.exception(f"Failed to load external extension '{extension}'")
             sys.exit(ErrorCodes.EXTENSION_LOAD)
 
     # noinspection PyBroadException

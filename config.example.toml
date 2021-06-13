@@ -5,8 +5,7 @@ name = "KazTron Example Bot"
 # This description shows up in the `.help` message.
 description = "An example bot."
 
-# Extensions to load: corresponds to package names within the kaztron.cogs package. At this time,
-# there is no way to load extensions from other packages.
+# Extensions to load: corresponds to package names within the kaztron.cogs package.
 # extensions = [
 #    "dice",     "discordtools",      "fuck",
 #    "modnotes", "modnotes.bantools", "modnotes.jointools", "modtools",
@@ -15,6 +14,12 @@ description = "An example bot."
 #    "voicelog", "welcome",           "wordfilter",
 #]
 extensions = []
+
+# Third-party extensions to load. Full package path (as would be used in an import statement).
+extensions_external = []
+
+# Directory for state, database, and other data files. This is relative to the kaztron.py script.
+data_dir = '.'
 
 # Links to display in the `.info` command output. These are PUBLIC links.
 info_links = [

@@ -36,5 +36,18 @@ class ConfigKeyError(ConfigError, AttributeError, KeyError):
 
 
 class ConfigConverterError(ConfigError):
+    """
+    :deprecated: 3.0.0
+    """
     def __str__(self):
         return "Error in converter for configuration: {}".format(self._get_config_info())
+
+
+class ConfigValueError(ConfigError, ValueError):
+    def __str__(self):
+        return "Invalid configuration value: {}".format(self._get_config_info())
+
+
+class ConfigTypeError(ConfigError, TypeError):
+    def __str__(self):
+        return "Invalid type of configuration value: {}".format(self._get_config_info())

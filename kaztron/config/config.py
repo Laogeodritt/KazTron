@@ -47,8 +47,8 @@ class TomlReadOnlyStrategy:
 
 class KaztronConfig:
     """
-    Simple interface for KazTron configuration files. This class uses JSON as
-    the file backend, but this API could easily be adapted to other languages.
+    Simple interface for KazTron configuration files. Currently supports two file formats using
+    the Strategy design pattern: JSON (read/write) and TOML (read-only).
 
     Sections can be accessed as attributes (as long as the name is a valid attribute name). If a
     section doesn't exist,
@@ -94,7 +94,7 @@ class KaztronConfig:
 
     @property
     def filename(self):
-        return self.filename
+        return self._file_strategy.filename
 
     @filename.setter
     def filename(self, value):
@@ -191,6 +191,7 @@ class KaztronConfig:
         :param section: Section name to retrieve
         :raises ConfigKeyError: section doesn't exist
         """
+        # TODO: update for new config types/objects system
         try:
             return self._data[section]
         except KeyError as e:
@@ -223,6 +224,7 @@ class KaztronConfig:
         :raises ConfigKeyError: Section/key not found and ``default`` param is ``None``
         :raises TypeError: Section is not a dict
         """
+        # TODO: update for new config types/objects system (remove converter, predefined defaults, ...)
         logger.debug("config:get: file={!r} section={!r} key={!r}"
             .format(self.filename, section, key))
 
@@ -307,6 +309,12 @@ class KaztronConfig:
             if section not in self._defaults:
                 self._defaults[section] = {}
             self._defaults[section].update(kwargs)
+
+    def notify(self):
+        """
+        Notify that a config value has been changed in the underlying data. This is generally only
+        used by :cls:`ConfigObject` when data is being set through it.
+        """
 
     def __str__(self):
         return '{!s}{}'.format(self.filename, '[ro]' if self.read_only else '')

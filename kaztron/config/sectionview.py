@@ -39,6 +39,9 @@ class SectionView:
 
     Attempting to get a non-existent value, if no default is set, will raise a ConfigKeyError. If
     a converter raises an error (either get or set), a ConfigConverterError is raised.
+
+    ..deprecated : 3.0
+        Use :cls:`kaztron.config.ConfigObject` models instead.
     """
     def __init__(self, config: KaztronConfig, section: str):
         self.__config = config

@@ -20,39 +20,40 @@ logger = logging.getLogger(__name__)
 
 
 class DiscordConfig:
-    token: str
-    channel_output: ChannelConfig
-    channel_public: ChannelConfig
-    channel_issues: ChannelConfig
-    mod_roles: List[RoleConfig]
-    admin_roles: List[RoleConfig]
-    status: List[Dict[str, Union[str, int]]]
+    token = config.String(required=True)
+    channel_output = config.Channel(required=True)
+    channel_public = config.Channel(required=True)
+    channel_issues = config.Channel(required=True)
+    mod_roles: List[discord.Role] = config.List(config.Role())
+    admin_roles: List[discord.Role] = config.List(config.Role())
+    status: List[DiscordPlaying] = config.List(DiscordPlaying())
 
 
 class DaemonConfig:
-    enabled: bool
-    pidfile: str
-    user: str
-    group: str
-    log: str
+    enabled = config.Boolean(default=False)
+    pidfile = config.File(default='kaztron.pid')
+    user = config.String()
+    group = config.String()
+    log = config.String(default='daemon.log')
 
 
 class FormatsConfig:
-    date: str
-    datetime: str
-    datetime_seconds: str
+    # TODO: DEFAULTS
+    date = config.String()
+    datetime = config.String()
+    datetime_seconds = config.String()
 
 
-class CoreConfig(SectionView):
-    # TODO: clean this up + the converters to work with the new core config structure
-    name: str
-    description: str
-    extensions: List[str]
-    info_links: List[Dict[str, str]]
-    formats: FormatsConfig
-    daemon: DaemonConfig
-    discord: DiscordConfig
-
+class CoreConfig(config.ConfigSection):
+    # TODO: DEFAULTS/REQUIRED
+    __section__ = 'core'
+    name = config.String(required=True)
+    description = config.String()
+    extensions = config.List(config.String())
+    info_links: List[InfoLinks] = config.List(InfoLinks())
+    formats = FormatsConfig()
+    daemon = DaemonConfig()
+    discord = DiscordConfig()
 
 class CoreCog(kaztron.KazCog):
     """!kazhelp

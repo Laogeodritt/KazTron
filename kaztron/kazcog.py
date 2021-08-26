@@ -1,4 +1,4 @@
-from typing import Type, Dict
+from typing import Type, Dict, TYPE_CHECKING
 
 import logging
 from enum import Enum
@@ -6,9 +6,11 @@ from enum import Enum
 import discord
 from discord.ext import commands
 
-from kaztron import KazClient
-from kaztron.config import KaztronConfig, SectionView
+from kaztron.config import KaztronConfig, ConfigModel, ConfigRoot
 from kaztron.utils import logging as logutils
+
+if TYPE_CHECKING:
+    from kaztron import KazClient
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +42,10 @@ class KazCog(commands.Cog):
     """
 
     def __init__(self,
-                 bot: KazClient,
+                 bot: 'KazClient',
                  config_section_name: str = None,
-                 config_section_view: Type[SectionView] = None,
-                 state_section_view: Type[SectionView] = None):
+                 config_model: Type[ConfigModel] = None,
+                 state_model: Type[ConfigModel] = None):
         # dependencies
         self._bot = bot
         self._cmd_logger = logging.getLogger("kaztron.commands")
@@ -55,31 +57,30 @@ class KazCog(commands.Cog):
         self._section = None  # type: str
         self._config = None  # type: SectionView
         self._state = None  # type: SectionView
-        self._cogstate = None  # type: KaztronConfig
-        self._setup_config(config_section_name, config_section_view, state_section_view)
+        self._cog_state = None  # type: KaztronConfig
+        self._setup_config(config_section_name, config_model, state_model)
 
-    def _setup_config(self,
-                      section: str,
-                      config_view: Type[SectionView] = None,
-                      state_view: Type[SectionView] = None
+    def _setup_config(self, section: str,
+                      config_model: Type[ConfigModel],
+                      state_model: Type[ConfigModel]
                       ):
         self._section = section
         if not self._section:
             return
-        if config_view:
-            self.bot.config.set_section_view(self._section, config_view)
-        if state_view:
-            self.bot.state.set_section_view(self._section, state_view)
-        self._config = self.bot.config.get_section(self._section)
-        self._state = self.bot.state.get_section(self._section)
+        if config_model:
+            self.bot.config.root.cfg_register_model(self._section, config_model)
+        if state_model:
+            self.bot.state.cfg_register_model(self._section, state_model)
+        self._config = self.bot.config.root.get(self._section)
+        self._state = self.bot.state.root.get(self._section)
 
     @property
-    def bot(self) -> KazClient:
+    def bot(self) -> 'KazClient':
         """ The bot/client instance this cog belongs to. """
         return self._bot
 
     @property
-    def config(self) -> SectionView:
+    def config(self) -> ConfigModel:
         """
         The read-only user configuration for this cog. For the bot-wide config, use
         `self.bot.config` (see :attr:`KazClient.config`).
@@ -87,10 +88,10 @@ class KazCog(commands.Cog):
         return self._config
 
     @property
-    def state(self) -> SectionView:
+    def state(self) -> ConfigModel:
         """
         The read/write bot state for this cog. This is always a section in the bot-wide state file.
-        See also :attr:`~.cogstate` for the custom state file set up by :meth:`~.setup_cogstate`.
+        See also :attr:`~.cog_state` for the custom state file set up by :meth:`~.setup_cog_state`.
 
         If you want to access the  bot-wide state file, use `self.bot.state`
         (see :attr:`KazClient.state`).
@@ -98,28 +99,32 @@ class KazCog(commands.Cog):
         return self._state
 
     @property
-    def cogstate(self) -> KaztronConfig:
+    def cog_state(self) -> ConfigRoot:
         """
-        The custom state file set up by :meth:`~.setup_cogstate`. If not set up, returns None.
-        """
-        return self._cogstate
+        The custom state file set up by :meth:`~.setup_cog_state`. If not set up, returns None.
 
-    def setup_cogstate(self, name, defaults=None):
+        The custom state file can be accessed with :attr:`~.cog_state`. It is a full
+        :cls:`ConfigRoot` object model for the config file, which supports custom-defined ORM-
+        style class definitions for its contents.
+        """
+        return self._cog_state.root
+
+    def setup_cog_state(self, name, defaults=None):
         """
         Set up a custom state file for this cog.
 
         The name specified MUST BE UNIQUE BOT-WIDE. Otherwise, concurrency issues will occur as
         multiple KaztronConfig instances cannot own a single file.
 
-        The custom state file can be accessed with :attr:`~.cogstate`. It is a full KaztronConfig
-        instance. If you'd like to set up your own SectionView objects for the sections in this
-        file, you can call :meth:`KaztronConfig.set_section_view`.
+        The custom state file can be accessed with :attr:`~.cog_state`. It is a full
+        :cls:`ConfigRoot` object model for the config file, which supports custom-defined ORM-
+        style class definitions for its contents.
 
         :param name: A simple alphanumeric name, to be used as part of the filename.
         :param defaults: Defaults for this state file, as taken by the :cls:`KaztronConfig`
             constructor.
         """
-        self._cogstate = KaztronConfig('state-' + name + '.json', defaults)
+        self._cog_state = KaztronConfig('state-' + name + '.json', defaults)
 
     @property
     def status(self):
@@ -195,16 +200,16 @@ class KazCog(commands.Cog):
         pass
 
     @commands.Cog.listener('on_disconnect')
-    async def on_disconnect_cleanup_cogstate(self):
-        if self.cogstate:
-            self.cogstate.write(True)
+    async def on_disconnect_cleanup_cog_state(self):
+        if self.cog_state:
+            self.cog_state.write()
         self._status = CogStatus.SHUTDOWN
 
     @commands.Cog.listener('on_command_completion')
-    async def on_command_completion_save_cogstate(self, _: commands.Context):
+    async def on_command_completion_save_cog_state(self, _: commands.Context):
         """ On command completion, save cog-local state file. """
-        if self.cogstate:
-            self.cogstate.write(False)
+        if self.cog_state:
+            self.cog_state.write()
 
     async def cog_before_invoke(self, ctx: commands.Context):
         """

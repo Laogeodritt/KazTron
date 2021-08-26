@@ -7,7 +7,7 @@ import discord
 from discord.ext import commands
 
 import kaztron
-from kaztron import KazCog
+from kaztron.kazcog import KazCog
 from kaztron.errors import *
 from kaztron.config import KaztronConfig
 # from kaztron.help_formatter import CoreHelpParser, DiscordHelpFormatter
@@ -197,7 +197,7 @@ class KazClient(commands.Bot):
         else:
             return True
 
-    def validate_channel(self, *, x: Union[int, str]) -> AnyChannel:
+    def validate_channel(self, x: Union[int, str]) -> AnyChannel:
         """
         Get a channel by name or ID.
 
@@ -211,13 +211,13 @@ class KazClient(commands.Bot):
             raise ValueError("Channel {} not found".format(x if isinstance(x, int) else f"'#{x}'"))
         return ch
 
-    def validate_role(self, *, x: Union[int, str]) -> discord.Role:
+    def validate_role(self, x: Union[int, str]) -> discord.Role:
         """
         Get a role by name or ID.
 
         Similar to :meth:`discord.Client.get_role`, but raises ValueError if not found.
         """
-        if x:
+        if isinstance(x, int):
             role = self.guild.get_role(x)
         else:
             role = discord.utils.get(self.guild.roles, name=x)

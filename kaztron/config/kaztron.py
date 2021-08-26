@@ -12,11 +12,11 @@ def get_kaztron_config(defaults=None) -> KaztronConfig:
     if not _kaztron_config:
         try:
             _kaztron_config = KaztronConfig("config.toml", file_strategy=TomlReadOnlyStrategy,
-                                            defaults=defaults, read_only=True)
-        except FileNotFoundError as e:
+                                            read_only=True)
+        except FileNotFoundError:
             # legacy config.json file
             _kaztron_config = KaztronConfig("config.json", file_strategy=JsonFileStrategy,
-                                            defaults=defaults, read_only=True)
+                                            read_only=True)
     return _kaztron_config
 
 

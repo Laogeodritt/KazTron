@@ -1,8 +1,9 @@
 class ConfigError(Exception):
-    def __init__(self, file, section, key, *args):
-        super().__init__(file, section, key, *args)
+    # TODO: add a msg field here, and defaults in each subclass
+    def __init__(self, file, path, key, *args):
+        super().__init__(file, path, key, *args)
         self.file = file
-        self.section = section
+        self.path = path
         self.key = key
 
     def __str__(self):
@@ -10,8 +11,8 @@ class ConfigError(Exception):
 
     def _get_config_info(self):
         s = [self.file]
-        if self.section:
-            s.append(self.section)
+        if self.path:
+            s.append('.'.join(self.path))
         if self.key:
             s.append(self.key)
         return ':'.join(s)

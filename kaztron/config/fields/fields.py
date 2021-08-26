@@ -1,17 +1,14 @@
 import typing
-from typing import List, Dict, Pattern, Union, Any, Type, TYPE_CHECKING
+from typing import List, Dict, Pattern, Union, Any, Type, Optional, TYPE_CHECKING
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Container, Sized, MutableSequence, MutableMapping
 
-import dataclasses
 from dataclasses import dataclass
-import logging
-
 from datetime import datetime, timezone, timedelta
+import logging
+from munch import Munch
 
 if TYPE_CHECKING:
-    from munch import Munch
-    from kaztron.config.object import ConfigObject
+    from kaztron.config.object import ConfigModel
 
 ConfigDict = Union[dict, Munch]
 ConfigPrimitive = Union[str, int, float, list, ConfigDict]
@@ -19,17 +16,26 @@ ConfigPrimitive = Union[str, int, float, list, ConfigDict]
 logger = logging.getLogger("kaztron.config")
 
 
+__all__ = 'Field', 'PrimitiveField', 'StringField', 'BooleanField', \
+          'IntegerField', 'ConstrainedIntegerField', 'FloatField', 'ConstrainedFloatField', \
+          'TimestampField', 'DatetimeField', \
+          'ListField', 'DictField', 'ConfigModelField', \
+          'ConfigPrimitive'
+
+
+# TODO: standardise ValueError raised? e.g. (message, value, field)
+
 @dataclass
 class Field(ABC):
     """
     Represents a single field in a config file, that is to say, a ``key: value`` pair in a config
     file dict (a.k.a. table in TOML, object in JSON).
 
-    Use Field subclasses in a :cls:`ConfigObject` subclass definition to set up the schema for a
+    Use Field subclasses in a :cls:`ConfigModel` subclass definition to set up the schema for a
     config object representation.
 
     Field subclasses have two purposes: 1) provide information about the field, such as its type,
-    its key name and whether it is a required field, to be used by :cls:`ConfigObject`;
+    its key name and whether it is a required field, to be used by :cls:`ConfigModel`;
     2) provide conversion from config-file primitive types to Python objects and back.
 
     The type represented by a Field subclass should always be one of:
@@ -37,7 +43,7 @@ class Field(ABC):
     1. an immutable object;
     2. a primitive (including mutable primitives like ListField, DictField) (see subclasses of
        :cls:`PrimitiveField`); or
-    3. a :cls:`ConfigObject` subclass, represented by :cls:`ConfigObjectField`.
+    3. a :cls:`ConfigModel` subclass, represented by :cls:`ConfigModelField`.
 
     You can subclass Field, or one of the other Field subclasses, to define a custom type. You
     primarily need to implement :meth:`convert` and :meth:`serialize`, along with any parameters
@@ -48,19 +54,19 @@ class Field(ABC):
     which cannot happen "sneakily" unlike editing a mutable object). ListField and DictField get
     around this by wrapping the original list or dict and providing its mutation methods.
 
-    :ivar name: Name of the field. If None, use the :cls:`ConfigObject` attribute name. This defines
+    :ivar name: Name of the field. If None, use the :cls:`ConfigModel` attribute name. This defines
         the key to look up in the underlying config data: it can be different than the attribute
-        name used to access this field in the :cls:`ConfigObject`.
+        name used to access this field in the :cls:`ConfigModel`.
     :ivar required: Whether this field is required.
     :ivar default: Default value. Only meaningful if ``required`` is ``False``. If this field
         is not defined, this value is returned instead. (It will not be written to the source
         data.) Cannot be ``None``.
     :ivar lazy: If true, validate only on access. Otherwise, validate when initialised. Validation
         involves verifying required fields and verifying that they :meth:`~.convert` properly.
-    :ivar parent: The parent :cls:`ConfigObject`. This should not be set on construction, but will
-        automatically be set by the parent :cls:`ConfigObject`.
+    :ivar parent: The parent :cls:`ConfigModel`. This should not be set on construction, but will
+        automatically be set by the parent :cls:`ConfigModel`.
     """
-    name: str
+    name: Optional[str] = None
     default: Any = None
     required: bool = False
     lazy: bool = True
@@ -113,7 +119,7 @@ class StringField(PrimitiveField):
     :ivar validation: Optional. Regular expression pattern for validation.
     :ivar validation_help: Optional. Text used for error message if validation fails.
     """
-    len: int = -1
+    len: int = None
     minlen: int = 0
     validation: Pattern = None
     validation_help: str = None
@@ -124,8 +130,8 @@ class StringField(PrimitiveField):
             raise TypeError("StringField value must be string")
         if not self._is_valid_length(value):
             raise ValueError("invalid length")
-        if not self.validation.search(value) is None:
-            raise ValueError("validation pattern error")
+        if self.validation and self.validation.search(value) is None:
+            raise ValueError(self.validation_help or "validation pattern error")
         return value
 
     def serialize(self, value: str) -> str:
@@ -137,12 +143,14 @@ class StringField(PrimitiveField):
             raise TypeError("StringField value must be string")
         if not self._is_valid_length(value):
             raise ValueError("invalid length")
+        if self.validation and self.validation.search(value) is None:
+            raise ValueError(self.validation_help or "validation pattern error")
         return value
 
     def _is_valid_length(self, str_val: str):
-        is_valid_length = self.minlen <= len(str_val) <= self.len
-        is_valid_minlength = self.len is None and self.minlen <= len(str_val)
-        return is_valid_length or is_valid_minlength
+        is_valid_min = self.minlen <= len(str_val)
+        is_valid_max = self.len is None or len(str_val) <= self.len
+        return is_valid_max and is_valid_min
 
 
 @dataclass
@@ -189,8 +197,11 @@ class ConstrainedIntegerField(IntegerField):
         Validate integer's limits. If the value is out-of-range, this function will return the
         min/max value instead.
         """
-        value = int(value)
-        constr_value = max(self.min, min(self.max, value))
+        constr_value = int(value)
+        if self.min is not None:
+            constr_value = max(self.min, constr_value)
+        if self.max is not None:
+            constr_value = min(self.max, constr_value)
         if value != constr_value:
             logging.warning(f"{self.name}: Read value {value} constrained to {constr_value}")
         return constr_value
@@ -200,13 +211,17 @@ class ConstrainedIntegerField(IntegerField):
         Validate integer's limits. If the value is out-of-range, this function will return the
         min/max value instead.
         """
-        value = int(value)
-        constr_value = max(self.min, min(self.max, value))
+        constr_value = int(value)
+        if self.min is not None:
+            constr_value = max(self.min, constr_value)
+        if self.max is not None:
+            constr_value = min(self.max, constr_value)
         if constr_value != value:
             logging.warning(f"{self.name}: Serialize value {value} constrained to {constr_value}")
-            return constr_value
+        return constr_value
 
 
+@dataclass
 class FloatField(PrimitiveField):
     """
     Represents a floating-point field. This field will reject values out of range.
@@ -242,7 +257,8 @@ class FloatField(PrimitiveField):
         return value
 
     def is_allowed_special(self, value: float):
-        return self.allow_special and (value == self.INF or value == self.NINF or value == self.NAN)
+        return self.allow_special or \
+               not (value == self.INF or value == self.NINF or value == self.NAN)
 
     def _is_valid_range(self, value: float):
         is_min_ok = self.min is None or self.min <= value
@@ -261,23 +277,47 @@ class ConstrainedFloatField(FloatField):
 
     def convert(self, value: float) -> float:
         """ Validate float's limits. """
-        value = float(value)
-        constr_value = max(self.min, min(self.max, value))
-        if not self.is_allowed_special(value):
+        constr_value = float(value)
+        if not self.is_allowed_special(constr_value):
             raise ValueError("Infinities and NaN not allowed")
+        if self.min is not None:
+            constr_value = max(self.min, constr_value)
+        if self.max is not None:
+            constr_value = min(self.max, constr_value)
         if value != constr_value:
             logging.warning(f"{self.name}: Read value {value} constrained to {constr_value}")
         return constr_value
 
     def serialize(self, value: float) -> float:
         """ Validate float's limits. """
-        value = float(value)
-        constr_value = max(self.min, min(self.max, value))
-        if not self.is_allowed_special(value):
+        constr_value = float(value)
+        if not self.is_allowed_special(constr_value):
             raise ValueError("Infinities and NaN not allowed")
+        if self.min is not None:
+            constr_value = max(self.min, constr_value)
+        if self.max is not None:
+            constr_value = min(self.max, constr_value)
         if value != constr_value:
             logging.warning(f"{self.name}: Serialize value {value} constrained to {constr_value}")
-        return value
+        return constr_value
+
+
+@dataclass
+class BooleanField(PrimitiveField):
+    def convert(self, value) -> bool:
+        if isinstance(value, bool):
+            return value
+        elif isinstance(value, str):
+            if value.lower() in ('0', 'off', 'no', 'disabled', 'false'):
+                return False
+            if value.lower() in ('1', 'on', 'yes', 'enabled', 'true'):
+                return True
+            raise ValueError("string value is not a known boolean word")
+        else:
+            return bool(value)
+
+    def serialize(self, value) -> bool:
+        return self.convert(value)
 
 
 @dataclass
@@ -336,7 +376,7 @@ class DatetimeField(GenericDatetimeField):
 
 
 @dataclass
-class ContainerField(Field, Container, Iterable, Sized, ABC):
+class ContainerField(Field, ABC):
     """
     Represents any kind of config file container. This is an abstract base class.
 
@@ -344,29 +384,11 @@ class ContainerField(Field, Container, Iterable, Sized, ABC):
     fields replace the container they represent and provide all the normal access methods to the
     data directly. They also provide conversion and validation of the contents.
     """
-    # TODO: separate the Fields from the implementor classes
-    # TODO: make sure implementor has root/parent; remove parent from the container field classes
     type: Field = PrimitiveField(name=None)
-
-    @abstractmethod
-    def init_data(self, data):
-        """
-        Pass the raw primitive container that this field represents, and set up caching (and
-        non-lazy conversion if applicable).
-
-        :param data: The raw list from the config file. Can be None to clear the data.
-        :raise IndexError: invalid length, if validated
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def is_ready(self):
-        """ Return True if data has been initialized via :meth:`init_data`. """
 
 
 @dataclass
-class ListField(ContainerField, MutableSequence):
+class ListField(ContainerField):
     """
     Represents a list. See also :cls:`ContainerField` for more info.
 
@@ -375,156 +397,34 @@ class ListField(ContainerField, MutableSequence):
     any :cls:`Field`, then the list will be converted and validated using that Field object, and
     can only contain compatible values.
     """
-    # TODO: more logging
     max_len: int = None
     min_len: int = 0
-    _converted: list = dataclasses.field(init=False)
-    _convert_map: List[bool] = dataclasses.field(init=False)  # for lazy conversion
-    _serialized_data: list = dataclasses.field(init=False)
 
-    def __post_init__(self):
-        self._converted = None
-        self._convert_map = None
-        self._serialized_data = None
-
-    def init_data(self, data: list):
-        """
-        Pass the raw primitive data that this ListField represents, and set up caching (and non-lazy
-        conversion if applicable).
-
-        :param data: The raw list from the config file.
-        :raise IndexError: invalid length
-        """
-        if len(data) > self.max_len or len(data) < self.min_len:
-            raise IndexError("invalid length")
-
-        self._serialized_data = data
-        if self._serialized_data is not None:  # allows for clearing data
-            if self.lazy:
-                self._converted = [None] * len(self._serialized_data)
-                self._convert_map = [False] * len(self._serialized_data)
-            else:
-                self._converted = self.convert(self._serialized_data)
-                self._convert_map = [True] * len(self._serialized_data)
-        else:
-            self._converted = None
-            self._convert_map = None
-
-    @property
-    def is_ready(self):
-        return self._serialized_data is not None
-
-    def _validate_length(self) -> bool:
-        return (self.max_len is None and self.min_len <= len(self)) or \
-               (self.min_len <= len(self) <= self.max_len)
-
-    def __len__(self):
-        return len(self._serialized_data)
-
-    def __getitem__(self, index: int):
-        if self._convert_map[index]:
-            obj_item = self._converted[index]
-        else:
-            obj_item = self.type.convert(self._serialized_data[index])
-            self._converted[index] = obj_item
-            self._convert_map[index] = True
-        return obj_item
-
-    def __setitem__(self, index: int, obj_value):
-        self._serialized_data[index] = self.type.serialize(obj_value)
-        # don't store this value in _converted cache - avoids problems with references/mutable types
-        # we will convert this from the raw data on the next access to this index instead
-        self._convert_map[index] = False
-        self.parent.notify_update(self.name, self._serialized_data)
-
-    def __delitem__(self, index: int):
-        if len(self) <= self.min_len:  # this would bring us below minimum length
-            raise IndexError(index, self.min_len)
-
-        del self._serialized_data[index]
-        del self._converted[index]
-        del self._convert_map[index]
-        self.parent.notify_update(self.name, self._serialized_data)
-
-    def insert(self, index: int, obj_value):
-        if len(self) >= self.max_len:  # this would bring us above maximum length
-            raise IndexError(index, self.max_len)
-
-        self._serialized_data.insert(index, self.type.serialize(obj_value))
-
-        # same comment here as in __setitem__
-        self._converted.insert(index, None)
-        self._convert_map.insert(index, False)
-
-        self.parent.notify_update(self.name, self._serialized_data)
+    def _validate_length(self, d) -> bool:
+        return (self.max_len is None and self.min_len <= len(d)) or \
+               (self.min_len <= len(d) <= self.max_len)
 
     def convert(self, raw_list: List[ConfigPrimitive]) -> List:
+        if not self._validate_length(raw_list):
+            raise ValueError("invalid length", raw_list, self)
         return [self.type.convert(raw_item) for raw_item in raw_list]
 
     def serialize(self, obj_list: List[Any]) -> List[ConfigPrimitive]:
+        if not self._validate_length(obj_list):
+            raise ValueError("invalid length", obj_list, self)
         return [self.type.serialize(obj_item) for obj_item in obj_list]
 
 
 @dataclass
-class DictField(ContainerField, MutableMapping):
+class DictField(ContainerField):
     """
     Represents a dict/table with string keys. See also :cls:`ContainerField` for more info.
 
     If the ``type`` attribute is left default, then this is a naïve dict: it will not convert or
     validate values and can contain mixed primitive types. If the ``type`` attribute is defined as
-    any :cls:`Field`, then the list will be converted and validated using that Field object, and
+    any :cls:`Field`, then the dict will be converted and validated using that Field object, and
     can only contain compatible values.
     """
-    # TODO: more logging
-    _converted: Dict[str, Any] = dataclasses.field(init=False)
-    _serialized_data: Dict[str, ConfigPrimitive] = dataclasses.field(init=False)
-
-    def __post_init__(self):
-        self._converted = None
-        self._serialized_data = None
-
-    def init_data(self, data: Dict[str, Any]):
-        """
-        Pass the raw primitive data that this ListField represents, and set up caching (and non-lazy
-        conversion if applicable).
-
-        :param data: The raw list from the config file. Can be None to clear data.
-        """
-        self._serialized_data = data
-        if self.lazy:
-            self._converted = {}
-        elif self._serialized_data is not None:  # allows for clearing data by setting data to None
-            self._converted = self.convert(self._serialized_data)
-
-    @property
-    def is_ready(self):
-        return self._serialized_data is not None
-
-    def __iter__(self):
-        return iter(self._serialized_data)  # iterates over keys
-
-    def __len__(self):
-        return len(self._serialized_data)
-
-    def __getitem__(self, key: str):
-        try:
-            return self._converted[key]
-        except KeyError:
-            obj_item = self.type.convert(self._serialized_data[key])
-            self._converted[key] = obj_item
-            return obj_item
-
-    def __setitem__(self, key: str, obj_value):
-        self._serialized_data[key] = self.type.serialize(obj_value)
-        # don't store this value in _converted cache - avoids problems with references/mutable types
-        # we will convert this from the raw data on the next access to this index instead
-        del self._converted[key]
-        self.parent.cfg_notify_update(self.name, self._serialized_data)
-
-    def __delitem__(self, key: str):
-        del self._serialized_data[key]
-        del self._converted[key]
-        self.parent.cfg_notify_update(self.name, self._serialized_data)
 
     def convert(self, raw_dict: Dict[str, ConfigPrimitive]) -> Dict[str, Any]:
         return {key: self.type.convert(raw_item) for key, raw_item in raw_dict.items()}
@@ -534,33 +434,37 @@ class DictField(ContainerField, MutableMapping):
 
 
 @dataclass
-class ConfigObjectField(Field):
+class ConfigModelField(Field):
     """
-    Field that contains a ConfigObject. This is an alternative to :cls:`DictField`. It allows
+    Field that contains a ConfigModel. This is an alternative to :cls:`DictField`. It allows
     object-oriented access to this field, along with a number of configuration file convenience
     methods and nesting of further downstream fields; DictField, on the other hand, only allows
     primitive (non-converted) access to its values or assumes that all values are of the same
     converted type.
 
     This field, in particular, can be used within a :Cls:`ListField`, :cls:`DictField`, or another
-    :cls:`ConfigObjectField` in order to allow nested object-oriented access to the entire
+    :cls:`ConfigModelField` in order to allow nested object-oriented access to the entire
     config file structure.
 
-    This field represents a ConfigObject subclass instance.
+    This field represents a ConfigModel subclass instance.
 
-    :ivar type: The ConfigObject class that this field represents.
-    :ivar strict_keys: If True, then keys not configured as a field by the ConfigObject are
+    :ivar type: The ConfigModel class that this field represents.
+    :ivar strict_keys: If True, then keys not configured as a field by the ConfigModel are
         rejected. If False, writing or reading a key not configured is permitted, and will be
         treated as a generic PrimitiveField (i.e. will read or write any primitive type).
     """
-    type: Type[ConfigObject]
+    type: Type['ConfigModel'] = None
     strict_keys = True
 
-    def convert(self, value: dict) -> ConfigObject:
+    def __post_init__(self):
+        if type is None:
+            raise ValueError('type must be specified')
+
+    def convert(self, value: dict) -> 'ConfigModel':
         conv_obj = self.type()
         conv_obj.cfg_set_field(self)
         conv_obj.cfg_set_data(value)
         return conv_obj
 
-    def serialize(self, value: ConfigObject) -> dict:
+    def serialize(self, value: 'ConfigModel') -> dict:
         return {key: value.get(key) for key in value.keys()}

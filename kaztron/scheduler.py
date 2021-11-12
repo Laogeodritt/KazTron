@@ -13,10 +13,15 @@ from kaztron.utils.asyncio import datetime2loop
 
 logger = logging.getLogger(__name__)
 
-
 TaskFunction = Union[
     Callable[[], Awaitable[None]],
     Callable[[Any], Awaitable[None]]]  #: async def name() -> None
+
+try:
+    current_task = asyncio.current_task
+except AttributeError:  # Python < 3.7
+    def current_task(*args, **kwargs):
+        return asyncio.Task.current_task(*args, **kwargs)
 
 
 class Task(Hashable):
@@ -111,7 +116,7 @@ class TaskInstance:
 
     def is_current(self):
         """ Return True if called from within this task. """
-        return self.async_task is asyncio.Task.current_task()
+        return self.async_task is current_task()
 
     def is_active(self):
         """

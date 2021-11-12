@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from kaztron.config import DiscordDummy
 
 __all__ = 'GuildChannelField', 'TextChannelField', 'VoiceChannelField', 'CategoryChannelField', \
-          'RoleField', 'MemberField'
+          'RoleField', 'MemberField', 'DiscordModelField'
 
 
 @dataclass
@@ -21,7 +21,8 @@ class DiscordModelField(Field, ABC):
 
     Implement serialize() using the Discord ID value.
     """
-    must_exist = True
+    # TODO: special handling for not caching dummy objects?
+    must_exist: bool = True
     client: 'KazClient' = None
 
     @staticmethod
@@ -73,7 +74,7 @@ class TextChannelField(GuildChannelField):
 
     def convert(self, value) -> Union[discord.TextChannel, 'DiscordDummy']:
         obj = super().convert(value)
-        if not isinstance(obj, discord.TextChannel):
+        if not isinstance(obj, (discord.TextChannel, DiscordDummy)):
             raise TypeError("must be a text channel", value)
         return obj
 
@@ -90,7 +91,7 @@ class VoiceChannelField(GuildChannelField):
 
     def convert(self, value) -> Union[discord.VoiceChannel, 'DiscordDummy']:
         obj = super().convert(value)
-        if not isinstance(obj, discord.VoiceChannel):
+        if not isinstance(obj, (discord.VoiceChannel, DiscordDummy)):
             raise TypeError("must be a voice channel", value)
         return obj
 
@@ -107,7 +108,7 @@ class CategoryChannelField(GuildChannelField):
 
     def convert(self, value) -> Union[discord.CategoryChannel, 'DiscordDummy']:
         obj = super().convert(value)
-        if not isinstance(obj, discord.CategoryChannel):
+        if not isinstance(obj, (discord.CategoryChannel, DiscordDummy)):
             raise TypeError("must be a category", value)
         return obj
 

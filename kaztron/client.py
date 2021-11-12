@@ -54,6 +54,9 @@ class KazClient(commands.Bot):
         #     'name': self.config.core.get('name')
         # })
 
+        self.setup_config_attributes(self._config)
+        self.setup_config_attributes(self._state)
+
     @property
     def config(self):
         """ Global client read-only configuration. """
@@ -224,6 +227,15 @@ class KazClient(commands.Bot):
         if role is None:
             raise ValueError("Role {} not found".format(x if isinstance(x, int) else f"'{x}'"))
         return role
+
+    def setup_config_attributes(self, config: 'KaztronConfig'):
+        """
+        Set up any attributes the config system needs at runtime. This is automatically called
+        for the default config files (read-only config and state), but should be called on any
+        new config files created by the bot which use Discord-related Field types.
+        """
+        from kaztron.config import DiscordModelField
+        config.root.cfg_set_runtime_attributes(DiscordModelField, client=self)
 
     @task_handled_errors
     async def _parse_help(self):

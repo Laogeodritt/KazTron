@@ -125,6 +125,7 @@ class KazCog(commands.Cog):
             constructor.
         """
         self._cog_state = KaztronConfig('state-' + name + '.json', defaults)
+        self.bot.setup_config_attributes(self._cog_state)
 
     @property
     def status(self):

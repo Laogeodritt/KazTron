@@ -22,7 +22,8 @@ class ConfigNodeMixin:
         self.__config_field__: Optional[Field] = None
         self.__config_parent__: Optional['ConfigNodeMixin'] = None
         self.__config_root__: Optional['ConfigRoot'] = None
-        self.__config_index__: Optional[int] = None
+        self._parent_index: Optional[int] = None
+        self._field_runtime_attributes: Dict[Type[Field], Dict[str, Any]] = {}
 
     def cfg_set_field(self, field: Field):
         self.__config_field__ = field
@@ -63,6 +64,7 @@ class ConfigNodeMixin:
         within the KazTronConfig data object, and not a copy of the data, in order for data
         writes to work properly.
         """
+        self._update_runtime_attributes(field)
         if isinstance(field, ConfigModelField):
             node = field.convert(raw_value)
             node.cfg_set_parent(self)
@@ -89,12 +91,54 @@ class ConfigNodeMixin:
         Update the metadata of a node so that it becomes this node's child. Optionally also update
         its raw data store (this does not copy data over, only changes the referenced data).
         """
+        self._update_runtime_attributes(field)
         if isinstance(node, ConfigNodeMixin):
             node.cfg_set_field(field)
             node.cfg_set_parent(self)
             if raw_value is not None:
                 node.cfg_set_data(raw_value)
         return node
+
+    def _update_runtime_attributes(self, field: Field):
+        for attr_name, attr_value in self.cfg_get_runtime_attributes(type(field)):
+            setattr(field, attr_name, attr_value)
+
+    def cfg_set_runtime_attributes(self, FieldType: Type[Field], **kwargs):
+        """
+        Set runtime attributes for a specific Field. This attribute will recursively be applied
+        to all child fields of the specified type (unless overridden in a child node). Calling
+        this method will replace any previously set attributes.
+
+        Context: some Field objects require special runtime attributes to convert correctly; for
+        example, DiscordModelField subclasses need an instance of the Discord client to be able to
+        look up conversions.
+
+        To apply a runtime attribute for a given field anywhere in a config file, apply it to the
+        file's :cls:`ConfigRoot` instance.
+
+        :param FieldType: The Field class to set.
+        :param kwargs: keyword arguments for the attributes to add.
+        :return:
+        """
+        self._field_runtime_attributes[FieldType] = copy(kwargs)
+
+    def cfg_get_runtime_attributes(self, FieldType: Type[Field]) -> Dict[str, Any]:
+        """
+        Get all runtime attributes applicable to a specified Field class. This will also search for
+        superclasses of the specified Field class, and return a merged dict of all attributes found.
+        """
+        try:
+            # get attributes
+            resolved_attributes = self.__config_parent__.cfg_get_runtime_attributes(FieldType)
+        except AttributeError:
+            resolved_attributes = {}
+
+        for MroFieldType in FieldType.__mro__:
+            try:
+                resolved_attributes.update(self._field_runtime_attributes[MroFieldType])
+            except KeyError:
+                pass
+        return resolved_attributes
 
     @property
     def cfg_file(self) -> Optional[str]:
@@ -105,10 +149,10 @@ class ConfigNodeMixin:
 
     @property
     def cfg_path(self) -> Tuple:
-        if self.__config_index__ is None:
+        if self._parent_index is None:
             node_name = self.__config_field__.name or '<null>'
         else:
-            node_name = self.__config_index__
+            node_name = self._parent_index
 
         try:
             return self.__config_parent__.cfg_path + (node_name,)
@@ -498,13 +542,13 @@ class ConfigList(ConfigNodeMixin, MutableSequence):
     def _update_child_node(self, field, node, raw_value=None, index: int=None):
         node = super()._update_child_node(field, node, raw_value)
         if index is not None and isinstance(node, ConfigNodeMixin):
-            node.__config_index__ = index
+            node._parent_index = index
         return node
 
     def _convert_child_node(self, field: Field, raw_value: ConfigPrimitive, index: int=None) -> Any:
         node = super()._convert_child_node(field, raw_value)
         if index is not None and isinstance(node, ConfigNodeMixin):
-            node.__config_index__ = index
+            node._parent_index = index
         return node
 
     def __getitem__(self, index: int):

@@ -27,7 +27,7 @@ def stop_daemon():
     # noinspection PyPackageRequirements
     from daemon import pidfile
     print("Reading pidfile...")
-    pidf = pidfile.TimeoutPIDLockFile(config.get('core', 'daemon_pidfile'))
+    pidf = pidfile.TimeoutPIDLockFile(config.get(('core', 'daemon', 'pidfile'), "pid.lock"))
     pid = pidf.read_pid()
     print("Stopping KazTron (PID={:d})...".format(pid))
     os.kill(pid, signal.SIGINT)
@@ -46,25 +46,27 @@ if __name__ == '__main__':
     except IndexError:
         cmd = None
 
-    if cmd == 'start' and config.get('core', 'daemon', False):
-        print("Starting KazTron (daemon mode)...")
+    is_daemon = config.get(('core', 'daemon', 'enabled'), False)
+
+    if cmd == 'start' and is_daemon:
+        print("Daemonize...")
         with get_daemon_context(config):
-            print("Starting KazTron daemon...")
+            print("Starting KazTron (daemon)...")
             setup_logging(logging.getLogger(), config, console=False)
-            run(asyncio.get_event_loop())
+            run_kaztron(asyncio.get_event_loop())
 
     elif cmd == 'start':  # non-daemon
-        print("Starting KazTron (non-daemon mode)...")
+        print("Starting KazTron ...")
         setup_logging(logging.getLogger(), config, console=True)
-        run(asyncio.get_event_loop())
+        run_kaztron(asyncio.get_event_loop())
 
     elif cmd == 'debug':
         print("Starting KazTron (debug mode)...")
         setup_logging(logging.getLogger(), config, debug=True)
-        run(asyncio.get_event_loop())  # always non-daemon mode
+        run_kaztron(asyncio.get_event_loop())  # always non-daemon mode
 
     elif cmd == 'stop':
-        if not config.get('core', 'daemon', False):
+        if not is_daemon:
             print("[ERROR] Cannot stop: daemon mode not enabled", file=sys.stderr)
             sys.exit(ErrorCodes.DAEMON_NOT_RUNNING)
 
@@ -75,7 +77,7 @@ if __name__ == '__main__':
             sys.exit(ErrorCodes.DAEMON_NOT_RUNNING)
 
     elif cmd == 'restart':
-        if not config.get('core', 'daemon', False):
+        if not is_daemon:
             print("[ERROR] Cannot restart: daemon mode not enabled", file=sys.stderr)
             sys.exit(ErrorCodes.DAEMON_NOT_RUNNING)
 
@@ -88,7 +90,7 @@ if __name__ == '__main__':
         with get_daemon_context(config):
             print("Starting KazTron daemon...")
             setup_logging(logging.getLogger(), config, console=False)
-            run(asyncio.get_event_loop())
+            run_kaztron(asyncio.get_event_loop())
 
     else:
         print("Usage: ./kaztron.py <start|stop|restart|debug|help>\n")

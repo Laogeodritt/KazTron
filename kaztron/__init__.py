@@ -17,6 +17,9 @@ bot_info["links"]["Manual"] = "http://worldbuilding.network/kaztron/"
 bot_info["links"]["GitHub"] = "https://github.com/Worldbuilding/KazTron"
 bot_info["links"]["Bugs/Issues"] = "https://github.com/Worldbuilding/KazTron/issues"
 
+cfg_core_sections = ("core", "logging")
+
+# TODO: move defaults the fuck out of here
 cfg_defaults = {
     "core": {
         "name": "UnnamedBot",

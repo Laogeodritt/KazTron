@@ -36,12 +36,12 @@ datetime_seconds = "%Y-%m-%d %H:%M:%S"
 
 [core.daemon]
 
-# Daemon mode, only supported on Linux. Useful for bots that are intended to be run on a server
-# continuously: this will ensures it runs continuously in the background (not tied to a session),
-# and allows for running in a service user/group context for higher security.
+# Daemon mode, only supported on Linux. Useful for bots that are intended to be run on a server:
+# this will ensures it runs continuously in the background (not tied to a session), and allows for
+# running in a service user/group context for higher security.
 
-enabled = true
-pidfile = "kaztron.pid"
+enabled = false
+pidfile = "pid.lock"
 
 # When run in daemon mode, the process will switch to this user/group immediately upon spawning.
 user = "kaztron-user"
@@ -103,3 +103,19 @@ gzip_backups = true
 # "kaztron.help_formatter" = "INFO"
 # "sqlalchemy.engine" = "WARNING"
 # "asyncprawcore" = "INFO"
+
+############
+# EXTENSIONS
+############
+
+# One section per extension (with sub-sections permissible)
+#
+# Example 1: internal extension, will try to load the package "kaztron.extensionA":
+#
+# [extensionA]
+# enable = true  # if false, won't try to load this extension; default is true
+#
+# Example 2: external extension, will try to load the specified package
+# [extensionB]
+# enable = true
+# package = "other_package.extensionB"

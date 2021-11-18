@@ -8,7 +8,6 @@ import discord
 from discord.ext import commands
 
 import kaztron
-from kaztron.config import SectionView, ChannelConfig, RoleConfig
 from kaztron.errors import *
 from kaztron.help_formatter import DiscordHelpFormatter, JekyllHelpFormatter
 from kaztron.rolemanager import RoleManager
@@ -18,42 +17,6 @@ from kaztron.utils.datetime import format_timestamp
 
 logger = logging.getLogger(__name__)
 
-
-class DiscordConfig:
-    token = config.String(required=True)
-    channel_output = config.Channel(required=True)
-    channel_public = config.Channel(required=True)
-    channel_issues = config.Channel(required=True)
-    mod_roles: List[discord.Role] = config.List(config.Role())
-    admin_roles: List[discord.Role] = config.List(config.Role())
-    status: List[DiscordPlaying] = config.List(DiscordPlaying())
-
-
-class DaemonConfig:
-    enabled = config.Boolean(default=False)
-    pidfile = config.File(default='kaztron.pid')
-    user = config.String()
-    group = config.String()
-    log = config.String(default='daemon.log')
-
-
-class FormatsConfig:
-    # TODO: DEFAULTS
-    date = config.String()
-    datetime = config.String()
-    datetime_seconds = config.String()
-
-
-class CoreConfig(config.ConfigSection):
-    # TODO: DEFAULTS/REQUIRED
-    __section__ = 'core'
-    name = config.String(required=True)
-    description = config.String()
-    extensions = config.List(config.String())
-    info_links: List[InfoLinks] = config.List(InfoLinks())
-    formats = FormatsConfig()
-    daemon = DaemonConfig()
-    discord = DiscordConfig()
 
 class CoreCog(kaztron.KazCog):
     """!kazhelp

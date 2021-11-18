@@ -1,7 +1,8 @@
-from typing import Union, Optional
+from typing import Union, Optional, List, Dict
 
 import logging
 import random
+from datetime import timedelta
 
 import discord
 from discord.ext import commands
@@ -9,17 +10,82 @@ from discord.ext import commands
 import kaztron
 from kaztron.kazcog import KazCog
 from kaztron.errors import *
-from kaztron.config import KaztronConfig
+from kaztron import config as cfg
 # from kaztron.help_formatter import CoreHelpParser, DiscordHelpFormatter
-from kaztron.scheduler import Scheduler
+from kaztron.scheduler import Scheduler, task
 
 from kaztron.utils.decorators import task_handled_errors
-
+from kaztron.utils.discord import Limits
 
 logger = logging.getLogger("kazclient")
+KaztronConfig = cfg.KaztronConfig
 
 AnyChannel = Union[discord.TextChannel,     discord.VoiceChannel, discord.DMChannel,
                    discord.CategoryChannel, discord.StoreChannel, discord.GroupChannel]
+
+
+class InfoLink(cfg.ConfigModel):
+    name: str = cfg.StringField(required=True, len=Limits.EMBED_FIELD_NAME)
+    url: str = cfg.StringField(required=True, len=Limits.EMBED_FIELD_VALUE - 16)
+
+
+class BotStatus(cfg.ConfigModel):
+    name: str = cfg.StringField(required=True, len=Limits.STATUS)
+    emoji = cfg.PrimitiveField(required=False)  # TODO: emoji model?
+
+
+class CoreFormats(cfg.ConfigModel):
+    date: str = cfg.StringField(default="%Y-%m-%d")
+    datetime: str = cfg.StringField(default="%Y-%m-%d %H:%M")
+    datetime_seconds: str = cfg.StringField(default="%Y-%m-%d %H:%M:%S")
+
+
+class CoreDaemon(cfg.ConfigModel):
+    enabled: bool = cfg.BooleanField(default=False)
+    pidfile: str = cfg.StringField(default="pid.lock")
+    user: str = cfg.StringField()
+    group: str = cfg.StringField()
+    log: str = cfg.StringField(default="daemon.log")
+
+
+class CoreDiscord(cfg.ConfigModel):
+    token: str = cfg.StringField(required=True)
+    channel_output: discord.TextChannel = cfg.TextChannelField(required=True)
+    channel_public: discord.TextChannel = cfg.TextChannelField(required=True)
+    channel_issues: discord.TextChannel = cfg.TextChannelField(required=True)
+    mod_roles: List[discord.Role] = cfg.ListField(type=cfg.RoleField(), default=[])
+    admin_roles: List[discord.Role] = cfg.ListField(type=cfg.RoleField(), default=[])
+    mod_channels: List[discord.TextChannel] = cfg.ListField(type=cfg.TextChannelField())
+    admin_channels: List[discord.TextChannel] = cfg.ListField(type=cfg.TextChannelField())
+    status: List[BotStatus] = cfg.ListField(type=cfg.ConfigModelField(type=BotStatus), default=[])
+    status_change_interval: timedelta = cfg.TimeDeltaField(default=timedelta(seconds=0))
+
+
+class CoreConfig(cfg.ConfigModel):
+    name: str = cfg.StringField(required=True)
+    description: str = cfg.StringField(default=None)
+    data_dir: str = cfg.StringField(default='.')  # TODO: IMPLEMENT ME
+    # TODO: merge the kaztron.__init__ defaults
+    info_links: List[InfoLink] = cfg.ListField(type=cfg.ConfigModelField(type=InfoLink), default=[])
+    formats: CoreFormats = cfg.ConfigModelField(type=CoreFormats)  # TODO: CHECK THIS IS READ CORRECTLY (utils?)
+    daemon: CoreDaemon = cfg.ConfigModelField(type=CoreDaemon)
+    discord: CoreDiscord = cfg.ConfigModelField(type=CoreDiscord)
+
+
+class Logging(cfg.ConfigModel): # TODO: CHECK THAT THIS IS PROPERLY SET UP
+    file: str = cfg.StringField(default="kaztron.log")
+    level: str = cfg.StringField(default="INFO")  # TODO: enum?
+    max_size_kb: int = cfg.IntegerField(default=0)
+    max_backups: int = cfg.IntegerField(default=0)
+    tags: Dict[str, str] = cfg.DictField(type=cfg.StringField(),  # TODO: enum?
+        default={
+            "discord": "INFO",
+            "websockets.protocol": "INFO",
+            "kaztron.config": "INFO",
+            "kaztron.help_formatter": "INFO",
+            "sqlalchemy.engine": "WARNING",
+            "asyncprawcore": "INFO"
+        })
 
 
 class KazClient(commands.Bot):
@@ -37,12 +103,9 @@ class KazClient(commands.Bot):
         self._state = client_state
 
         if 'description' not in kwargs:
-            kwargs['description'] = self.config.get('core', 'description')
+            # don't use ConfigModel yet
+            kwargs['description'] = self.config.get(('core', 'description'))
         super().__init__(*args, **kwargs)
-
-        self._ch_out = None  # type: discord.TextChannel
-        self._ch_test = None  # type: discord.TextChannel
-        self._ch_pub = None  # type: discord.TextChannel
 
         self._is_first_load = True
 
@@ -56,11 +119,18 @@ class KazClient(commands.Bot):
 
         self.setup_config_attributes(self._config)
         self.setup_config_attributes(self._state)
+        self._config.root.cfg_register_model('core', CoreConfig)
+        self._config.root.cfg_register_model('logging', Logging)
 
     @property
     def config(self):
         """ Global client read-only configuration. """
         return self._config
+
+    @property
+    def core_config(self) -> CoreConfig:
+        """ Core bot configuration. """
+        return self._config.root.core
 
     @property
     def state(self):
@@ -87,17 +157,17 @@ class KazClient(commands.Bot):
     @property
     def channel_out(self) -> discord.TextChannel:
         """ Configured output channel. If not :meth:`~.is_ready`, returns None. """
-        return self._ch_out
+        return self.core_config.discord.channel_output
 
     @property
     def channel_public(self) -> discord.TextChannel:
         """ Configured public output channel. If not :meth:`~.is_ready`, returns None. """
-        return self._ch_pub
+        return self.core_config.discord.channel_public
 
     @property
     def channel_test(self) -> discord.TextChannel:
         """ Configured test channel. If not :meth:`~.is_ready`, returns None. """
-        return self._ch_test
+        return self.core_config.discord.channel_test
 
     @property
     def guild(self) -> Optional[discord.Guild]:
@@ -106,7 +176,7 @@ class KazClient(commands.Bot):
         guild bot and does not generally operate well on multiple guilds. If not :meth:`~.is_ready`,
         returns None. """
         try:
-            return self._ch_out.guild
+            return self.channel_out.guild
         except AttributeError:  # not yet ready
             return None
 
@@ -121,10 +191,7 @@ class KazClient(commands.Bot):
         logger.info("*** Disconnected.")
 
     async def on_ready(self):
-        self._ch_out = self.validate_channel(id=self.config.core.discord.channel_output)
-        self._ch_test = self.validate_channel(id=self.config.core.discord.channel_test)
-        self._ch_pub = self.validate_channel(id=self.config.core.discord.channel_public)
-
+        pass
         # TODO: help
         # set global variables for help parser
         # self.kaz_help_parser.variables['output_channel'] = '#' + self.channel_out.name
@@ -133,7 +200,10 @@ class KazClient(commands.Bot):
 
     async def _on_cogs_ready(self):
         """ Called when all cogs are ready. Logs and sends startup messages. """
-        await self._set_status_message()
+        interval = self.core_config.discord.status_change_interval
+        if interval.total_seconds() == 0:
+            interval = None
+        self.scheduler.schedule_task_in(self.task_change_status_message, in_time=0, every=interval)
         await self._send_startup_messages()
 
     async def _send_startup_messages(self):
@@ -144,7 +214,7 @@ class KazClient(commands.Bot):
             logger.error(f"=== COG READY ERRORS: {cog_errors:d} ===")
 
         if self._is_first_load:
-            logger.info(f"*** Bot {self.config.core.name} is now ready.")
+            logger.info(f"*** Bot {self.core_config.name} is now ready.")
             logger.info(f"*** Running KazTron v{kaztron.__version__} "
             f"| discord.py v{discord.__version__}")
             logger.info(f"*** Logged in as {self.user.name} <{self.user.id}>")
@@ -162,10 +232,11 @@ class KazClient(commands.Bot):
 
         self._is_first_load = False
 
-    async def _set_status_message(self):
-        if self.config.discord.status:
-            activity_data = random.choice(self.config.discord.status)
-            await self.change_presence(activity=discord.Game(name=activity_data['name']))
+    @task(is_unique=True)
+    async def task_change_status_message(self):
+        if self.core_config.discord.status:
+            activity_data = random.choice(self.core_config.discord.status)
+            await self.change_presence(activity=discord.Game(name=activity_data.name))
         else:  # clear the "starting up" message
             await self.change_presence(activity=None)
 
@@ -177,7 +248,8 @@ class KazClient(commands.Bot):
 
     def notify_cog_ready(self, cog: KazCog):
         """
-        Notify that a cog's on_ready() has executed (even if an error occurred).
+        Called by a cog to notify this client that a cog's on_ready() has executed (even if an error
+        occurred).
 
         Check if all cogs are so ready, and execute post-ready tasks.
         """
@@ -205,6 +277,7 @@ class KazClient(commands.Bot):
         Get a channel by name or ID.
 
         Similar to :meth:`discord.Client.get_channel`, but raises ValueError if not found.
+        :deprecated: 3.0.0
         """
         if isinstance(x, int):
             ch = self.guild.get_channel(x)
@@ -219,6 +292,7 @@ class KazClient(commands.Bot):
         Get a role by name or ID.
 
         Similar to :meth:`discord.Client.get_role`, but raises ValueError if not found.
+        :deprecated: 3.0.0
         """
         if isinstance(x, int):
             role = self.guild.get_role(x)

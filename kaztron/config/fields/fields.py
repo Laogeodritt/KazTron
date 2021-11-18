@@ -7,6 +7,8 @@ from datetime import datetime, timezone, timedelta
 import logging
 from munch import Munch
 
+from kaztron.utils.datetime import parse_timedelta, format_timedelta
+
 if TYPE_CHECKING:
     from kaztron.config.object import ConfigModel
 
@@ -18,7 +20,7 @@ logger = logging.getLogger("kaztron.config")
 
 __all__ = 'Field', 'PrimitiveField', 'StringField', 'BooleanField', \
           'IntegerField', 'ConstrainedIntegerField', 'FloatField', 'ConstrainedFloatField', \
-          'TimestampField', 'DatetimeField', \
+          'TimestampField', 'DatetimeField', 'TimeDeltaField', 'SecondsDeltaField',\
           'ListField', 'DictField', 'ConfigModelField', \
           'ConfigPrimitive'
 
@@ -267,6 +269,27 @@ class FloatField(PrimitiveField):
 
 
 @dataclass
+class SecondsDeltaField(FloatField):
+    """
+    Represents a time delta, stored in floating-point seconds with a resolution of microseconds.
+
+    This field is preferred for machine-written fields, such as storage in State files. For human-
+    entered values, use :cls:`TimeDeltaField` for a full string parser.
+    """
+
+    def convert(self, value: float) -> timedelta:
+        """ Convert a float (in seconds, microsecond resolution max) to a timedelta. """
+        return timedelta(seconds=super().convert(value))
+
+    def serialize(self, value: Union[timedelta, int, float]) -> float:
+        """ Convert a timedelta to seconds (resolution of microseconds).. """
+        try:
+            return value.total_seconds()
+        except AttributeError:
+            return value
+
+
+@dataclass
 class ConstrainedFloatField(FloatField):
     """
     Represents a floating point field. This field will automatically constrain out-of-range values
@@ -373,6 +396,41 @@ class DatetimeField(GenericDatetimeField):
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
         return value.isoformat()
+
+
+@dataclass
+class TimeDeltaField(Field):
+    """
+    Represents a time delta, stored as a human-readable string. This field allows natural entry
+    strings, like "2 days", "3 hours 15 minutes", "5d 2h". Does NOT accept fractional/decimal
+    values in strings. It can also accept plain int or float values in seconds.
+
+    This field uses a parser and can be extremely slow. Recommended only for small quantities of
+    human-entered values; use :cls:`SecondsDeltaField` for fast machine-readable values (e.g. for
+    storage in the State files).
+    """
+    min_seconds: int = 0
+    max_seconds: int = None
+
+    def convert(self, value: Union[str, int, float]) -> timedelta:
+        """ Parse a time string into a timedelta. """
+        try:
+            interval = parse_timedelta(value)
+        except TypeError:
+            interval = timedelta(seconds=value)
+        min_ok = interval.total_seconds() >= self.min_seconds
+        max_ok = self.max_seconds is None or interval.total_seconds() <= self.max_seconds
+        if not min_ok or not max_ok:
+            raise ValueError("time delta out of range")
+        return interval
+
+    def serialize(self, value: timedelta) -> str:
+        """ Convert a timedelta to a human-readable string. """
+        min_ok = value.total_seconds() >= self.min_seconds
+        max_ok = self.max_seconds is None or value.total_seconds() <= self.max_seconds
+        if not min_ok or not max_ok:
+            raise ValueError("time delta out of range")
+        return format_timedelta(value)
 
 
 @dataclass

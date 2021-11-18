@@ -24,6 +24,7 @@ class Limits:
     EMBED_FIELD_VALUE = 1024
     EMBED_FIELD_NUM = 25
     NAME = 32
+    STATUS = 128
 
 
 def check_role(rolelist: Iterable[str], message: discord.Message):

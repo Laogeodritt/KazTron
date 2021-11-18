@@ -4,14 +4,17 @@ from typing import Union, Tuple, Optional
 
 import discord
 
-from kaztron.config import get_kaztron_config
-
 
 DATEPARSER_SETTINGS = {
     'TIMEZONE': 'UTC',
     'TO_TIMEZONE': 'UTC',
     'RETURN_AS_TIMEZONE_AWARE': False
 }
+
+
+def _get_config_formats():
+    from kaztron.config import get_kaztron_config
+    return get_kaztron_config().root.core.formats
 
 
 def parse(timespec: str, future=False, **kwargs) -> Optional[datetime]:
@@ -81,7 +84,7 @@ def format_datetime(dt: datetime, seconds=False) -> str:
     :return:
     """
     format_key = 'datetime_format' if not seconds else 'datetime_seconds_format'
-    return dt.strftime(get_kaztron_config().get('core', format_key))
+    return dt.strftime(_get_config_formats().get(format_key))
 
 
 def format_date(d: Union[datetime, date]) -> str:
@@ -91,7 +94,21 @@ def format_date(d: Union[datetime, date]) -> str:
     :param d: The date or datetime object to format.
     :return:
     """
-    return d.strftime(get_kaztron_config().get('core', 'date_format'))
+    return d.strftime(_get_config_formats().get('date_format'))
+
+
+def parse_timedelta(s) -> timedelta:
+    """ Parse a time interval in natural language. Uses dateparser (flexible but slow)."""
+    now = datetime.now()
+    try:
+        timespec = parse('in ' + s, future=True, PARSERS=['relative-time'], RELATIVE_BASE=now) or \
+                   parse(s, future=True, PARSERS=['relative-time'], RELATIVE_BASE=now)
+        interval = timespec - now  # type: timedelta
+    except ValueError as e:
+        raise ValueError("Time delta string out of range for datetime", s[:64]) from e
+    except TypeError as e:
+        raise ValueError("Cannot parse time delta string", s[:64]) from e
+    return interval
 
 
 def format_timedelta(delta: timedelta, timespec="seconds") -> str:

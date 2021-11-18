@@ -513,6 +513,25 @@ class TestConstrainedFloatField:
         f = ConstrainedFloatField(allow_special=True)
         assert f.serialize(f.INF) is f.INF
 
+class TestSecondsDeltaField:
+    def test_default_constructor(self):
+        SecondsDeltaField()
+
+    def test_full_constructor(self):
+        f = SecondsDeltaField(name='blah', default=timedelta(seconds=2), required=True, lazy=False)
+        assert f.name == 'blah'
+        assert f.default == timedelta(seconds=2)
+        assert f.required
+        assert not f.lazy
+
+    def test_convert(self):
+        f = SecondsDeltaField()
+        assert f.convert(123.3125) == timedelta(seconds=123.3125)
+
+    def test_serialize(self):
+        f = SecondsDeltaField()
+        assert f.serialize(timedelta(days=1, seconds=34, microseconds=312500)) == 86434.3125
+
 
 class TestBooleanField:
     def test_default_constructor(self):
@@ -628,6 +647,70 @@ class TestDatetimeField:
     def test_serialise_with_timezone(self):
         f = DatetimeField()
         assert f.serialize(self.DATETIME_EDT) == self.SERIALIZED_EDT
+
+
+class TestTimeDeltaField:
+    def test_default_constructor(self):
+        TimeDeltaField()
+
+    def test_full_constructor(self):
+        f = TimeDeltaField(name='blah', default=timedelta(seconds=24), required=True, lazy=False,
+            min_seconds=0, max_seconds=2424)
+        assert f.name == 'blah'
+        assert f.default == timedelta(seconds=24)
+        assert f.required
+        assert not f.lazy
+
+    def test_convert_string(self):
+        f = TimeDeltaField()
+        assert f.convert("1 day 12 hours 34 minutes") == timedelta(days=1, hours=12, minutes=34)
+        assert f.convert("15m") == timedelta(minutes=15)
+        assert f.convert("75 seconds") == timedelta(seconds=75)
+        # dateparser has a hard time handling "1d 12h 34m"
+        assert f.convert("1 day 12h 34m") == timedelta(days=1, hours=12, minutes=34)
+        assert f.convert("4h34s") == timedelta(hours=4, seconds=34)
+
+    def test_convert_int_as_seconds(self):
+        f = TimeDeltaField()
+        assert f.convert(123) == timedelta(seconds=123)
+        assert f.convert(0) == timedelta(seconds=0)
+
+    def test_convert_float_as_seconds(self):
+        f = TimeDeltaField()
+        assert f.convert(0.0) == timedelta(seconds=0.0)
+        assert f.convert(12.5) == timedelta(seconds=12.5)
+
+    def test_serialize(self):
+        f = TimeDeltaField()
+        assert f.serialize(timedelta(seconds=65)) == '1 minute 5 seconds'
+        assert f.serialize(timedelta(hours=1, seconds=22)) == '1 hour 22 seconds'
+
+    def test_limits_minimum_only(self):
+        f = TimeDeltaField(min_seconds=10)
+        with pytest.raises(ValueError):
+            f.convert("5s")
+        f.convert("10s")
+        f.convert("20s")
+        with pytest.raises(ValueError):
+            f.serialize(timedelta(seconds=5))
+        f.serialize(timedelta(seconds=10))
+        f.serialize(timedelta(seconds=20))
+
+    def test_limits_both(self):
+        f = TimeDeltaField(min_seconds=10, max_seconds=20)
+        with pytest.raises(ValueError):
+            f.convert("5s")
+        f.convert("10s")
+        f.convert("20s")
+        with pytest.raises(ValueError):
+            f.convert("21s")
+
+        with pytest.raises(ValueError):
+            f.serialize(timedelta(seconds=5))
+        f.serialize(timedelta(seconds=10))
+        f.serialize(timedelta(seconds=20))
+        with pytest.raises(ValueError):
+            f.serialize(timedelta(seconds=20, microseconds=999999))
 
 
 @pytest.fixture

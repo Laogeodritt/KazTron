@@ -5,33 +5,20 @@ name = "KazTron Example Bot"
 # This description shows up in the `.help` message.
 description = "An example bot."
 
-# Extensions to load: corresponds to package names within the kaztron.cogs package.
-# extensions = [
-#    "dice",     "discordtools",      "fuck",
-#    "modnotes", "modnotes.bantools", "modnotes.jointools", "modtools",
-#    "quotedb",  "reminder",          "resource_channel",   "spotlight",
-#    "sprint",   "sticky",            "test",               "userstats",
-#    "voicelog", "welcome",           "wordfilter",
-#]
-extensions = []
-
-# Third-party extensions to load. Full package path (as would be used in an import statement).
-extensions_external = []
-
 # Directory for state, database, and other data files. This is relative to the kaztron.py script.
-data_dir = '.'
+# data_dir = '.'
 
 # Links to display in the `.info` command output. These are PUBLIC links.
-info_links = [
-    { name = "Google", url = "https://google.ca" },
-]
+# info_links = [
+#     { name = "Google", url = "https://google.ca" },
+# ]
 
 # For datetime representations in KazTron messages, e.g., timestamps.
 # https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes
 [core.formats]
-date = "%Y-%m-%d"
-datetime = "%Y-%m-%d %H:%M"
-datetime_seconds = "%Y-%m-%d %H:%M:%S"
+# date = "%Y-%m-%d"
+# datetime = "%Y-%m-%d %H:%M"
+# datetime_seconds = "%Y-%m-%d %H:%M:%S"
 
 
 [core.daemon]
@@ -41,20 +28,20 @@ datetime_seconds = "%Y-%m-%d %H:%M:%S"
 # running in a service user/group context for higher security.
 
 enabled = false
-pidfile = "pid.lock"
+# pidfile = "pid.lock"
 
 # When run in daemon mode, the process will switch to this user/group immediately upon spawning.
-user = "kaztron-user"
-group = "kaztron-group"
+# user = "kaztron-user"
+# group = "kaztron-group"
 
 # Pre-daemonization log.
-log = "daemon.log"
+# log = "daemon.log"
 
 
 [core.discord]
 
 # Bot auth token. (Careful not to share this or accidentally check this file into source control!)
-token = "asdfjkl;"
+token = "get this for your bot application from the Discord developer portal"
 
 # Global channels. Can be specified by channel ID or by name.
 # - Output channel is used for bot logs and moderator outputs. For example, errors and unauthorized
@@ -84,15 +71,19 @@ status = [
     { name = "with your hats", emoji = "👒" },
 ]
 
+# How often to change status. Can be in seconds, or a string like "2h30m" or "1 day". 0 to disable.
+# status_change_interval = 0
+# status_change_interval = "2 hours"
+
 
 [logging]
 file = "kaztron.log"
-level = "INFO"
+# level = "INFO"
 
 # For log rotation purposes: max size of a single log file, and max number of old log files to keep.
-max_size_kb = 0
-max_backups = 0
-gzip_backups = true
+# max_size_kb = 0
+# max_backups = 0
+# gzip_backups = true
 
 [logging.tags]
 # Python logging level overrides for specific tags. Use to fine-tune what gets logged.
@@ -119,3 +110,12 @@ gzip_backups = true
 # [extensionB]
 # enable = true
 # package = "other_package.extensionB"
+
+# Extensions not yet added to this config example
+# extensions = [
+#    "dice",     "discordtools",      "fuck",
+#    "modnotes", "modnotes.bantools", "modnotes.jointools", "modtools",
+#    "quotedb",  "reminder",          "resource_channel",   "spotlight",
+#    "sprint",   "sticky",            "test",               "userstats",
+#    "voicelog", "welcome",           "wordfilter",
+#]

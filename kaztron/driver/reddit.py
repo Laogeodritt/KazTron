@@ -10,7 +10,8 @@ from asyncpraw import *
 # noinspection PyUnresolvedReferences
 from asyncprawcore.exceptions import *
 
-from kaztron.config import SectionView, get_kaztron_config, get_runtime_config
+from kaztron.config import ConfigModel, StringField, DictField, \
+    get_kaztron_config, get_runtime_config
 
 logger = logging.getLogger(__name__)
 Reddit = apraw.Reddit
@@ -31,16 +32,18 @@ class DeletedError(KazRedditError):
         super().__init__(reddit_model, removed_by_category, *args)
 
 
-class RedditConfig(SectionView):
-    client_id: str
-    client_secret: str
-    user_agent: str
-    refresh_uri: str
+class RedditConfig(ConfigModel):
+    client_id: str = StringField(required=True)
+    client_secret: str = StringField(required=True)
+    user_agent: str = StringField(required=True)
+    refresh_uri: str = StringField(default='http://localhost:8080')
 
 
-class RedditState(SectionView):
-    refresh_tokens: MutableMapping[str, Optional[str]]  # username -> refresh_token
-    last_auth_state: str
+class RedditState(ConfigModel):
+    # username -> refresh_token
+    refresh_tokens: MutableMapping[str, Optional[str]] = \
+        DictField(type=StringField(required=False), default={})
+    last_auth_state: str = StringField(default=None)
 
 
 class RedditLoginManager:
@@ -57,15 +60,14 @@ class RedditLoginManager:
     """
     _global_config = get_kaztron_config()
     _global_state = get_runtime_config()
-    _global_config.set_section_view('reddit', RedditConfig)
-    _global_state.set_section_view('reddit', RedditState)
-    _config = _global_config.get_section('reddit')  # type: RedditConfig
-    _config.set_defaults(refresh_uri='http://localhost:8080')
-    _state = _global_state.get_section('reddit')  # type: RedditState
-    _state.set_defaults(
-        refresh_tokens={},
-        last_auth_state=None
-    )
+
+    @property
+    def _config(self):
+        return self._global_config.root.reddit
+
+    @property
+    def _state(self):
+        return self._global_state.root.reddit
 
     def __init__(self):
         # lazy cache of reddit instance objects

@@ -3,6 +3,11 @@ import logging
 import logging.handlers
 import os
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from kaztron.client import Logging
+
 
 class LoggingInfo:
     is_setup = False
@@ -15,12 +20,12 @@ class LoggingInfo:
 _logging_info = LoggingInfo()
 
 
-def setup_logging(logger, config, *, debug=False, console=True):
-    from kaztron.config import log_level
+def setup_logging(logger, config: KaztronConfig, *, debug=False, console=True):
     global _logging_info
+    cfg_logging = config.root.logging  # type: Logging
 
     if not debug:
-        cfg_level = config.get("logging", "level", converter=log_level)
+        cfg_level = cfg_logging.level
         console_level = max(cfg_level, logging.INFO)  # console never above INFO - avoid clutter
     else:
         cfg_level = console_level = logging.DEBUG
@@ -29,24 +34,18 @@ def setup_logging(logger, config, *, debug=False, console=True):
     _logging_info.cfg_level = cfg_level
 
     # Specific packages
-    cfg_packages = {  # defaults
-        "sqlalchemy.engine": "WARN",
-        "websockets.protocol": "INFO",
-        "discord": "INFO"
-    }
-    cfg_packages.update(config.get("logging", "tags"))
-    _logging_info.cfg_packages = cfg_packages
+    _logging_info.cfg_packages = cfg_logging.tags
 
-    for name, s_value in cfg_packages.items():
-        logging.getLogger(name).setLevel(max(log_level(s_value), cfg_level))
+    for name, s_value in _logging_info.cfg_packages.items():
+        logging.getLogger(name).setLevel(max(s_value, cfg_level))
 
     # File handler
     fh = logging.handlers.RotatingFileHandler(
-        config.get("logging", "file"),
-        maxBytes=config.get("logging", "max_size_kb")*1024,
-        backupCount=config.get("logging", "max_backups")
+        cfg_logging.file,
+        maxBytes=cfg_logging.max_size_kb*1024,
+        backupCount=cfg_logging.max_backups
     )
-    if config.get("logging", "gzip_backups"):
+    if cfg_logging.gzip_backups:
         fh.namer = gzip_namer
         fh.rotator = gzip_rotator
     fh_formatter = logging.Formatter(

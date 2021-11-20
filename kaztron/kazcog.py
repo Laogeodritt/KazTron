@@ -35,10 +35,8 @@ class KazCog(commands.Cog):
     :param config_section_name: The name of this cog's config section. Should be a valid Python
         identifier. Optional but recommended: if this is not specified, the `self.config` and
         `self.state` convenience properties will not be available.
-    :param config_section_view: A custom SectionView for this cog's config section. This is
-        provided so you can specify a subclass that has type hinting, converters, defaults, etc.
-        configured, which simplifies using the configuration and helps IDE autocompletion.
-    :param state_section_view: Same as ``config_section_view``, but for `self.state`.
+    :param config_model: The ConfigModel class for this cog's configuration.
+    :param state_model: Same as ``config_model``, but for `self.state`.
     """
 
     def __init__(self,
@@ -55,8 +53,8 @@ class KazCog(commands.Cog):
 
         # config stuff
         self._section = None  # type: str
-        self._config = None  # type: SectionView
-        self._state = None  # type: SectionView
+        self._config = None  # type: ConfigModel
+        self._state = None  # type: ConfigModel
         self._cog_state = None  # type: KaztronConfig
         self._setup_config(config_section_name, config_model, state_model)
 
@@ -148,7 +146,7 @@ class KazCog(commands.Cog):
 
     @commands.Cog.listener('on_connect')
     async def on_connect_set_status(self):
-        """ Resets the status to INIT (see #316, #317) and clear config converter caches. """
+        """ Resets the status to INIT (see #316, #317) and clear config caches. """
         self._status = CogStatus.INIT
         if self.config:
             self.config.clear_cache()
@@ -192,29 +190,29 @@ class KazCog(commands.Cog):
         these steps is unlikely or doesn't need for the cog to remain disabled, it may be preferable
         to define an ``on_ready`` listener instead.
 
-        KazCog will, by default, always FIRST test :attr:`config` and :attr:`state` converters as a
-        means of validating configuration, and consider validation to have failed if a converter
-        raises an error. It is not necessary to test these in the subclass. However, other
-        validation of the config/state may be performed. For this validation to work, converters
-        must be set BEFORE ``on_ready`` (e.g. in ``__init__()`` or ``on_connect``.
+        KazCog will, by default, always FIRST test all keys in the :attr:`config` and :attr:`state`
+        ConfigModels (non-recursively, but recursive testing can be achieved by setting the
+        ``lazy`` parameter to each Field), and considers validation to have failed if a converter
+        raises an error. It is not necessary to test these. However, further validation of the
+        config/state, beyond the Field.convert() validation, can be performed.
         """
         pass
 
     @commands.Cog.listener('on_disconnect')
     async def on_disconnect_cleanup_cog_state(self):
         if self.cog_state:
-            self.cog_state.write()
+            self.cog_state.cfg_write()
         self._status = CogStatus.SHUTDOWN
 
     @commands.Cog.listener('on_command_completion')
     async def on_command_completion_save_cog_state(self, _: commands.Context):
         """ On command completion, save cog-local state file. """
         if self.cog_state:
-            self.cog_state.write()
+            self.cog_state.cfg_write()
 
     async def cog_before_invoke(self, ctx: commands.Context):
         """
-        Cog-local pre-invoke hook. This base implementation logs all commands.
+        Cog-local pre-invoke hook. This base implementation logs all commands. Can be overridden.
 
         :param ctx: Context.
         """

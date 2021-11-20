@@ -162,6 +162,13 @@ class TestConfigModel:
         assert o.jkl.nest.five == 5
         assert list(o.jkl.nest.list) == [0, 2, 4, 6, 8, 10]
 
+    def test_traverse(self, model_fixture: ConfigModelFixture):
+        o = model_fixture.object
+        assert o.traverse('jkl', 'nest', 'five') == 5
+        assert o.traverse('jkl', 'nest') is o.jkl.nest
+        with pytest.raises(ConfigKeyError):
+            o.traverse('jkl', 'nest', 'doesnotexist')
+
     def test_read_converts_field(self, model_fixture: ConfigModelFixture):
         o = model_fixture.object
         assert o.asdf.big == 255  # if properly converted, ConstrainedIntegerField limits to 255

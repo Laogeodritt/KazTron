@@ -3,11 +3,13 @@ import logging
 
 import sys
 from typing import List, Dict, Union
+import re
 
 import discord
 from discord.ext import commands
 
 import kaztron
+from kaztron.client import CoreConfig
 from kaztron.errors import *
 from kaztron.help_formatter import DiscordHelpFormatter, JekyllHelpFormatter
 from kaztron.rolemanager import RoleManager
@@ -31,13 +33,10 @@ class CoreCog(kaztron.KazCog):
         - request
         - jekyllate
     """
-
     config: CoreConfig
 
     def __init__(self, bot):
         super().__init__(bot, 'core')
-        self.config.set_converters('channel_request', self.bot.validate_channel, lambda c: c.id)
-
         self.bot.event(self.on_error)  # register this as a global event handler, not just local
 
     async def on_error(self, event, *args, **kwargs):
@@ -345,7 +344,7 @@ class CoreCog(kaztron.KazCog):
             em.add_field(name="Channel", value=ctx.message.channel, inline=True)
         em.add_field(name="Timestamp", value=format_timestamp(ctx.message), inline=True)
         em.add_field(name="Content", value=content, inline=False)
-        await self.config.discord.channel_request(embed=em)
+        await self.config.discord.channel_issues.send(embed=em)
         await ctx.send(ctx.author.mention + " Your issue was submitted to the bot DevOps team. "
                        "If you have any questions or if there's an urgent problem, "
                        "please feel free to contact the moderators.")
@@ -375,8 +374,10 @@ class CoreCog(kaztron.KazCog):
 
         logger.info("jekyllate: Sending file...")
         buf.seek(0)
-        await self.bot.send_file(ctx.message.channel, buf,
-                                 filename=self.config.core.name + "-jekyll.zip")
+        filename = re.sub(r'[^A-Za-z0-9_\- ]', self.config.name) + '-jekyll.zip'
+        filename = filename.replace(' ', '-')
+        file = discord.File(buf, filename=filename)
+        await ctx.send(file=file)
 
 
 def setup(bot):

@@ -1,10 +1,11 @@
 import re
-from typing import List, Sequence, Iterable
+from typing import List, Sequence, Iterable, TYPE_CHECKING
 
 import discord
 from discord.ext import commands
 
-from kaztron.config import get_kaztron_config
+if TYPE_CHECKING:
+    from kaztron.client import CoreDiscord
 
 import logging
 
@@ -27,7 +28,12 @@ class Limits:
     STATUS = 128
 
 
-def check_role(rolelist: Iterable[str], message: discord.Message):
+def get_discord_cfg() -> 'CoreDiscord':
+    from kaztron.config import get_kaztron_config
+    return get_kaztron_config().root.core.discord
+
+
+def check_role(rolelist: Iterable[discord.Role], message: discord.Message):
     """
     Check if the author of a ``message`` has one of the roles in ``rolelist``.
 
@@ -36,7 +42,7 @@ def check_role(rolelist: Iterable[str], message: discord.Message):
         to check.
     """
     for role in rolelist:
-        if discord.utils.get(message.author.roles, name=role) is not None:
+        if discord.utils.get(message.author.roles, id=role.id) is not None:
             return True
     else:
         return False
@@ -63,9 +69,8 @@ def check_mod(ctx: commands.Context):
     Check if the sender of a command is a mod or admin (as defined by the
     roles in the "discord" -> "mod_roles" and "discord" -> "admin_roles" configs).
     """
-    config = get_kaztron_config()
-    return check_role(config.get("discord", "mod_roles", []), ctx.message) or \
-        check_role(config.get("discord", "admin_roles", []), ctx.message)
+    return check_role(get_discord_cfg().mod_roles, ctx.message) or \
+        check_role(get_discord_cfg().admin_roles, ctx.message)
 
 
 def check_admin(ctx: commands.Context):
@@ -73,8 +78,7 @@ def check_admin(ctx: commands.Context):
     Check if the sender of a command is an admin (as defined by the
     roles in the "discord" -> "admin_roles" config).
     """
-    config = get_kaztron_config()
-    return check_role(config.get("discord", "admin_roles", []), ctx.message)
+    return check_role(get_discord_cfg().admin_roles, ctx.message)
 
 
 async def remove_role_from_all(role: discord.Role):

@@ -50,9 +50,9 @@ class CoreDaemon(cfg.ConfigModel):
 
 class CoreDiscord(cfg.ConfigModel):
     token: str = cfg.StringField(required=True)
-    channel_output: discord.TextChannel = cfg.TextChannelField(required=True)
-    channel_public: discord.TextChannel = cfg.TextChannelField(required=True)
-    channel_issues: discord.TextChannel = cfg.TextChannelField(required=True)
+    channel_output: discord.TextChannel = cfg.TextChannelField(required=True, lazy=False)
+    channel_public: discord.TextChannel = cfg.TextChannelField(required=True, lazy=False)
+    channel_issues: discord.TextChannel = cfg.TextChannelField(required=True, lazy=False)
     mod_roles: List[discord.Role] = cfg.ListField(type=cfg.RoleField(), default=[])
     admin_roles: List[discord.Role] = cfg.ListField(type=cfg.RoleField(), default=[])
     mod_channels: List[discord.TextChannel] = cfg.ListField(type=cfg.TextChannelField())
@@ -74,10 +74,10 @@ class CoreConfig(cfg.ConfigModel):
 
 class Logging(cfg.ConfigModel): # TODO: CHECK THAT THIS IS PROPERLY SET UP
     file: str = cfg.StringField(default="kaztron.log")
-    level: str = cfg.StringField(default="INFO")  # TODO: enum?
+    level: str = cfg.LogLevelField(default="INFO")
     max_size_kb: int = cfg.IntegerField(default=0)
     max_backups: int = cfg.IntegerField(default=0)
-    tags: Dict[str, str] = cfg.DictField(type=cfg.StringField(),  # TODO: enum?
+    tags: Dict[str, int] = cfg.DictField(type=cfg.LogLevelField(),
         default={
             "discord": "INFO",
             "websockets.protocol": "INFO",

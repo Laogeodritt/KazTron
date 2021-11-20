@@ -307,7 +307,7 @@ class ConfigModel(ConfigNodeMixin, metaclass=ConfigModelMeta):
 
     def get(self, key: str) -> Any:
         """
-        Read a configuration value. Usage is similar to :meth:`KaztronConfig.get`.
+        Read a configuration value..
 
         If the key doesn't exist, behaviour depends on the key's associated :cls:`Field`: if the
         key is required, then :cls:`ConfigKeyError` is raised. Otherwise, the Field's default value
@@ -389,6 +389,18 @@ class ConfigModel(ConfigNodeMixin, metaclass=ConfigModelMeta):
 
         # notify changes - for lazy writing
         self.cfg_notify_update(key, ser_value)
+
+    def traverse(self, *args):
+        """
+        Traverse through a recursive ConfigModel tree and return the value. This method is basically
+        a recursive :meth:`get()` convenience function. Will raise a ConfigKeyError if it is not
+        possible to traverse through the given path. Cannot traverse through lists or dicts, only
+        ConfigModels.
+        """
+        current = self
+        for arg in args:
+            current = current.get(arg)
+        return current
 
     def __getattr__(self, key):
         return self.get(key)

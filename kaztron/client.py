@@ -3,6 +3,7 @@ from typing import Union, Optional, List, Dict
 import logging
 import random
 from datetime import timedelta
+import datetime
 
 import discord
 from discord.ext import commands
@@ -65,8 +66,13 @@ class CoreConfig(cfg.ConfigModel):
     name: str = cfg.StringField(required=True)
     description: str = cfg.StringField(default=None)
     data_dir: str = cfg.StringField(default='.')  # TODO: IMPLEMENT ME
-    # TODO: merge the kaztron.__init__ defaults
-    info_links: List[InfoLink] = cfg.ListField(type=cfg.ConfigModelField(type=InfoLink), default=[])
+    manual_url: str = cfg.StringField(required=False, default="")
+
+    public_links: List[InfoLink] = \
+        cfg.ListField(type=cfg.ConfigModelField(type=InfoLink), default=[])
+    mod_links: List[InfoLink] = \
+        cfg.ListField(type=cfg.ConfigModelField(type=InfoLink), default=[])
+
     formats: CoreFormats = cfg.ConfigModelField(type=CoreFormats)  # TODO: CHECK THIS IS READ CORRECTLY (utils?)
     daemon: CoreDaemon = cfg.ConfigModelField(type=CoreDaemon)
     discord: CoreDiscord = cfg.ConfigModelField(type=CoreDiscord)
@@ -108,6 +114,7 @@ class KazClient(commands.Bot):
         super().__init__(*args, **kwargs)
 
         self._is_first_load = True
+        self._startup_time = datetime.datetime.utcnow()
 
         self.add_check(self._command_check_ready)
 
@@ -180,9 +187,14 @@ class KazClient(commands.Bot):
         except AttributeError:  # not yet ready
             return None
 
+    @property
+    def uptime(self) -> datetime.timedelta:
+        return datetime.datetime.utcnow() - self._startup_time
+
     async def on_connect(self):
         if self._is_first_load:
             logger.info("*** CONNECTED TO DISCORD.")
+            self._startup_time = datetime.datetime.utcnow()
         else:
             logger.info("*** RECONNECTED.")
 
@@ -203,6 +215,9 @@ class KazClient(commands.Bot):
         interval = self.core_config.discord.status_change_interval
         if interval.total_seconds() == 0:
             interval = None
+        for task in self.scheduler.get_instances(self.task_change_status_message):
+            self.scheduler.cancel_task(task)
+            await task.wait()
         self.scheduler.schedule_task_in(self.task_change_status_message, in_time=0, every=interval)
         await self._send_startup_messages()
 
@@ -242,19 +257,49 @@ class KazClient(commands.Bot):
 
     def all_cogs_ready(self):
         """ Check if all cogs have had on_ready executed (even if they errored). """
-        registered_cogs = {cog for cog in self.cogs.values() if isinstance(cog, KazCog)}
-        ready_cogs = {cog for cog in registered_cogs if cog.is_ready or cog.is_error}
-        return registered_cogs == ready_cogs
+        for cog in self.cogs_kaz.values():
+            if not (cog.is_ready or cog.is_error):
+                return False
+        return True
 
     def notify_cog_ready(self, cog: KazCog):
         """
         Called by a cog to notify this client that a cog's on_ready() has executed (even if an error
         occurred).
 
-        Check if all cogs are so ready, and execute post-ready tasks.
+        Check if all cogs are ready, and if so, execute post-ready tasks.
         """
         if self.all_cogs_ready():
             self.loop.create_task(self._on_cogs_ready())
+
+    @property
+    def cogs_kaz(self) -> Dict[str, KazCog]:
+        """ Get all loaded KazCogs. """
+        return {name: cog for name, cog in self.cogs.items() if isinstance(cog, KazCog)}
+
+    @property
+    def cogs_std(self) -> Dict[str, commands.Cog]:
+        """
+        Get all loaded standard (non-KazCog) cogs. Specific status information is not available
+        for these cogs.
+        """
+        return {name: cog for name, cog in self.cogs.items() if not isinstance(cog, KazCog)}
+
+    @property
+    def cogs_ready(self) -> Dict[str, KazCog]:
+        """ Get all KazCogs that are ready and not in error state. """
+        return {name: cog for name, cog in self.cogs_kaz.items() if cog.is_ready}
+
+    @property
+    def cogs_error(self) -> Dict[str, KazCog]:
+        """ Get all KazCogs in error state. """
+        return {name: cog for name, cog in self.cogs_kaz.items() if cog.is_error}
+
+    @property
+    def cogs_not_ready(self) -> Dict[str, KazCog]:
+        """ Get all KazCogs that are not yet ready (or somehow failed without error?). """
+        return {name: cog for name, cog in self.cogs_kaz.items()
+                if not (cog.is_ready or cog.is_error)}
 
     async def on_command_completion(self, ctx: commands.Context):
         """ On command completion, save state files. """

@@ -2,22 +2,30 @@ import asyncio
 import logging
 
 import sys
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Tuple, Sequence
 import re
 
 import discord
 from discord.ext import commands
 
 import kaztron
-from kaztron.client import CoreConfig
+from kaztron import config as cfg
+from kaztron.client import CoreConfig, InfoLink
 from kaztron.errors import *
 from kaztron.help_formatter import DiscordHelpFormatter, JekyllHelpFormatter
 from kaztron.rolemanager import RoleManager
 from kaztron.utils.cogutils import *
-from kaztron.utils.datetime import format_timestamp
-
+from kaztron.utils.datetime import format_timestamp, format_timedelta
+from kaztron.utils.embeds import EmbedSplitter
 
 logger = logging.getLogger(__name__)
+
+
+class CoreState(cfg.ConfigModel):
+    public_links: List[InfoLink] = \
+        cfg.ListField(type=cfg.ConfigModelField(type=InfoLink), default=[])
+    mod_links: List[InfoLink] = \
+        cfg.ListField(type=cfg.ConfigModelField(type=InfoLink), default=[])
 
 
 class CoreCog(kaztron.KazCog):
@@ -34,9 +42,10 @@ class CoreCog(kaztron.KazCog):
         - jekyllate
     """
     config: CoreConfig
+    state: CoreState
 
     def __init__(self, bot):
-        super().__init__(bot, 'core')
+        super().__init__(bot, 'core', state_model=CoreState)
         self.bot.event(self.on_error)  # register this as a global event handler, not just local
 
     async def on_error(self, event, *args, **kwargs):
@@ -270,46 +279,204 @@ class CoreCog(kaztron.KazCog):
                 ("[ERROR] Unknown error while trying to process command:\n{}\n"
                  "**Error:** {!s}\n\nSee logs for details").format(cmd_string, exc))
 
-    @commands.command(pass_context=True)
+    @commands.command()
+    async def ping(self, ctx: commands.Context):
+        """!
+        description: Check if the bot is responsive. This command is designed to be minimalist and
+            provide minimal failure points, to allow verifying if the bot is at all responsive.
+        """
+        await ctx.send(ctx.author.mention + " Pong.")
+
+    @commands.command()
     @checks.mod_only()
-    async def info(self, ctx):
+    @checks.mod_channels()
+    async def version(self, ctx: commands.Context):
         """!kazhelp
 
-        description: |
-            Provides bot info and useful links.
-
-            This command provides the version of the {{name}} instance currently running, the latest
-            changelog summary, and links to documentation, the GitHub repository, and other
-            resources for operators and moderators.
-
-            TIP: *For mods.* If {{name}} ever seems unresponsive, try this command first.
+        description: Provides technical bot information and links for operators/admins.
+        details: Provides detailed version and runtime information on this {{name}} instance.
         """
         em = discord.Embed(color=0x80AAFF, title=self.config.name)
-        em.add_field(name="KazTron version",
-                     value="v{}".format(kaztron.bot_info["version"]), inline=True)
-        em.add_field(name="discord.py version",
-            value="v{}".format(discord.__version__), inline=True)
-        em.add_field(name="Loaded Cogs", value='\n'.join(self.bot.cogs.keys()))
+        em.add_field(name="KazTron Core", value="v{}".format(kaztron.__version__), inline=True)
+        em.add_field(name="discord.py", value="v{}".format(discord.__version__), inline=True)
+        em.add_field(name="Uptime", value=format_timedelta(self.bot.uptime), inline=True)
 
-        links = kaztron.bot_info["links"].copy()
-        links.update(self.config.info_links)
-        for title, url in links.items():
-            em.add_field(name=title, value="[{0}]({1})".format(title, url), inline=True)
+        em.add_field(name="Loaded Cogs", value=
+            '\n'.join(name for name in self.bot.cogs_ready) + '\n' +
+            '\n'.join(name + " (std cog)" for name in self.bot.cogs_std)
+        )
+        em.add_field(name="Load Error", value='\n'.join(name for name in self.bot.cogs_error))
+        em.add_field(name="Not Loaded", value='\n'.join(name for name in self.bot.cogs_not_ready))
+
+        for link in self.merge_info_links(kaztron.bot_links, tuple(), with_manual=True):
+            em.add_field(name=link.name, value=f'[{link.name}]({link.url})', inline=True)
         await ctx.send(ctx.author.mention, embed=em)
 
-    @commands.command(pass_context=True, aliases=['bug', 'issue'])
+    @commands.group(invoke_without_command=True)
+    async def info(self, ctx: commands.Context):
+        """!kazhelp
+
+        description: Provides bot info and useful links.
+        details: |
+            This command provides the version of the {{name}} instance currently running and links
+            to documentation, the GitHub repository, and other resources for bot users.
+
+            TIP: The links can be customised in the configuration or dynamically using the
+            {{!info add}} and {{!info rem}} commands.
+
+            NOTE: *For operators and moderators.* Use {{!version}} for technical bot info (like cog
+            status) and {{!modinfo}} for mod-specific info links.
+        """
+        em = EmbedSplitter(color=0x80AAFF, title=self.config.name)
+        em.set_footer(text="Can be customised by mods: `.info add` and `.info rem`.")
+        links = self.merge_info_links(self.config.public_links, self.state.public_links, True)
+        for link in links:
+            em.add_field(name=link.name, value=f'[{link.name}]({link.url})', inline=True)
+        for e in em.finalize():
+            await ctx.send(ctx.author.mention, embed=e)
+
+    @info.command(name='add')
+    @checks.mod_only()
+    async def info_add(self, ctx: commands.Context, name: str, url: str):
+        """!kazhelp
+
+        description: Add a public link to the {{!info}} command.
+        details: If a link of the same name already exists, replaces it.
+        parameters:
+            - name: name
+              type: str
+              description: Name or title of the linked resource. If it contains spaces, must be
+                surrounded by double quotes.
+            - name: url
+              type: str
+              description: URL of the linked resource. If it contains spaces, must be surrounded
+                by double quotes.
+        examples:
+            - command: .info add "/r/aww on reddit" https://reddit.com/r/aww
+              description: Adds a link to the /r/aww subreddit.
+        """
+        new_link = InfoLink(name=name, url=url)
+        try:  # try to find a link of the same name
+            i = next(i for i, v in enumerate(self.state.public_links) if v.name == name)
+            self.state.public_links[i] = new_link
+        except StopIteration:  # if same name not found
+            self.state.public_links.append(new_link)
+        await ctx.send(ctx.author.mention + f" Added link '{name}' {url}")
+
+    @info.command(name='rem', aliases=['remove'])
+    @checks.mod_only()
+    async def info_rem(self, ctx: commands.Context, name: str):
+        """!kazhelp
+
+        description: Remove a public link from the {{!info}} command.
+        parameters:
+            - name: name
+              type: str
+              description: Name or title of the linked resource. If it contains spaces, must be
+                surrounded by double quotes.
+        examples:
+            - command: .info rem "/r/aww on reddit"
+              description: Remove the link named "/r/aww on reddit".
+        """
+        try:
+            link = next(v for v in self.state.public_links if v.name == name)
+            self.state.public_links.remove(link)
+        except StopIteration:  # not found
+            await ctx.send(ctx.author.mention + f" **ERROR**: No link named '{name}'.")
+        else:
+            await ctx.send(ctx.author.mention + f" Removed link '{name}' to {link.url}")
+
+    @commands.group(invoke_without_command=True)
+    @checks.mod_only()
+    @checks.mod_channels()
+    async def modinfo(self, ctx: commands.Context):
+        """!kazhelp
+        description: Provides useful links for moderators and bot operators.
+        """
+        em = EmbedSplitter(color=0x80AAFF, title=self.config.name)
+        em.set_footer(text="Can be customised by mods: `.info add` and `.info rem`.")
+        links = self.merge_info_links(self.config.mod_links, self.state.mod_links, False)
+        for link in links:
+            em.add_field(name=link.name, value=f'[{link.name}]({link.url})', inline=True)
+        for e in em.finalize():
+            await ctx.send(ctx.author.mention, embed=e)
+
+    @modinfo.command(name='add')
+    @checks.mod_only()
+    @checks.mod_channels()
+    async def modinfo_add(self, ctx: commands.Context, name: str, url: str):
+        """!kazhelp
+
+        description: Add a link to the {{!modinfo}} command.
+        details: If a link of the same name already exists, replaces it.
+        parameters:
+            - name: name
+              type: str
+              description: Name or title of the linked resource. If it contains spaces, must be
+                surrounded by double quotes.
+            - name: url
+              type: str
+              description: URL of the linked resource. If it contains spaces, must be surrounded
+                by double quotes.
+        examples:
+            - command: .modinfo add "/r/aww on reddit" https://reddit.com/r/aww
+              description: Adds a link to the /r/aww subreddit.
+        """
+        new_link = InfoLink(name=name, url=url)
+        try:  # try to find a link of the same name
+            i = next(i for i, v in enumerate(self.state.mod_links) if v.name == name)
+            self.state.mod_links[i] = new_link
+        except StopIteration:  # if same name not found
+            self.state.mod_links.append(new_link)
+        await ctx.send(ctx.author.mention + f" Added mod link '{name}' {url}")
+
+    @modinfo.command(name='rem', aliases=['remove'])
+    @checks.mod_only()
+    @checks.mod_channels()
+    async def modinfo_rem(self, ctx: commands.Context, name: str):
+        """!kazhelp
+
+        description: Remove a link from the {{!modinfo}} command.
+        parameters:
+            - name: name
+              type: str
+              description: Name or title of the linked resource. If it contains spaces, must be
+                surrounded by double quotes.
+        examples:
+            - command: .modinfo rem "/r/aww on reddit"
+              description: Remove the link named "/r/aww on reddit".
+        """
+        try:
+            link = next(v for v in self.state.mod_links if v.name == name)
+            self.state.mod_links.remove(link)
+        except StopIteration:  # not found
+            await ctx.send(ctx.author.mention + f" **ERROR**: No mod link named '{name}'.")
+        else:
+            await ctx.send(ctx.author.mention + f" Removed mod link '{name}' to {link.url}")
+
+    def merge_info_links(self, a: Sequence[InfoLink], b: Sequence[InfoLink], with_manual=False):
+        """
+        Merge InfoLink lists. If links have the same name, b will overwrite a. If with_manual is
+        True, the manual is also added (but may be overwritten by both a and b).
+        """
+        if with_manual:
+            manual = [InfoLink(name='Manual', url=self.config.manual_url)]
+            return self.merge_info_links(self.merge_info_links(manual, a), b)
+
+        links = {link.name: link for link in a}
+        links.update({link.name: link for link in b})
+        return [links.values()]
+
+    @commands.command(pass_context=True, aliases=['bug'])
     @commands.cooldown(rate=3, per=120)
-    async def request(self, ctx, *, content: str):
+    async def issue(self, ctx, *, content: str):
         """!kazhelp
 
         description: Submit a bug report or feature request to the {{name}} bot team.
         details: |
-            Everyone can use this command, but please make sure that:
-
-            * Your issue is clear and sufficiently detailed.
-            * You submit **one issue per command**. Do not include multiple issues in one command,
-              or split up one issue into multiple commands. Otherwise the bot team will get mad at
-              you =P
+            Everyone can use this command, but please make sure that your submission is **clear**,
+            and submitted as **one issue per command** (don't split up one issue into several
+            commands or submit several issues in one command).
 
             If you're reporting a bug, include the answers to the questions:
 
@@ -318,24 +485,25 @@ class CoreCog(kaztron.KazCog):
             * Where and when did this happen? Ideally, link the message itself (message menu >
               Copy Link).
 
+            If you're requesting a feature, make sure to answer these questions:
+
+            * What do you want the feature to do?
+            * Why is this useful? Who do you expect will use it? How and where will they use it?
+
             IMPORTANT: Any submissions made via this system may be tracked publicly. By submitting
             a request via this system, you give us permission to post your username and message,
             verbatim or altered, to a public database for the purpose of project management.
 
-            IMPORTANT: Abuse of this command may be treated as channel spam, and enforced
-            accordingly.
-
-            NOTE: The three command names do not differ from each other. They are defined purely
-            for convenience.
+            IMPORTANT: Abuse of this command may be treated like spam, and enforced accordingly.
         examples:
             - command: |
                 .request When trying to use the `.roll 3d20` command, I get the message:
                 "An error occurred! Details have been logged. Let a mod know so we can investigate."
 
                 This only happens with d20, I've tried d12 and d6 with no problems.
-                The last time this happened in #tabletop on 2018-01-31 at 5:24PM PST.
+                The last time this happened was here: <direct link to message>
         """
-        em = discord.Embed(color=0x80AAFF)
+        em = EmbedSplitter(color=0x80AAFF, auto_truncate=True)
         em.set_author(name="User Issue Submission")
         em.add_field(name="User", value=ctx.message.author.mention, inline=True)
         try:
@@ -344,10 +512,11 @@ class CoreCog(kaztron.KazCog):
             em.add_field(name="Channel", value=ctx.message.channel, inline=True)
         em.add_field(name="Timestamp", value=format_timestamp(ctx.message), inline=True)
         em.add_field(name="Content", value=content, inline=False)
-        await self.config.discord.channel_issues.send(embed=em)
+        for e in em.finalize():
+            await self.config.discord.channel_issues.send(embed=em)
         await ctx.send(ctx.author.mention + " Your issue was submitted to the bot DevOps team. "
                        "If you have any questions or if there's an urgent problem, "
-                       "please feel free to contact the moderators.")
+                       "please feel free to contact the moderators directly.")
 
     @commands.command(pass_context=True)
     @checks.mod_only()

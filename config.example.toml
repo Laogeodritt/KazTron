@@ -8,8 +8,19 @@ description = "An example bot."
 # Directory for state, database, and other data files. This is relative to the kaztron.py script.
 # data_dir = '.'
 
-# Links to display in the `.info` command output. These are PUBLIC links.
-# info_links = [
+# Link to the manual. By default, this will not show up in `.info` and show the Worldbuilding
+# KazTron manual in `.version`.
+# manual_url = "https://example.invalid/kaztron/manual
+
+# Links to display in the public `.info` command output. These can be overridden using
+# `.info add` and `.info rem`.
+# public_links = [
+#     { name = "Google", url = "https://google.ca" },
+# ]
+
+# Links to display in the mod-only `.modinfo` command output. These can be overridden using
+## `.modinfo add` and .`modinfo rem`.
+# mod_links = [
 #     { name = "Google", url = "https://google.ca" },
 # ]
 

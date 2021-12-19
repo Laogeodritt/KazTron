@@ -4,7 +4,7 @@ _kaztron_config = None
 _runtime_config = None
 
 
-def get_kaztron_config(defaults=None) -> KaztronConfig:
+def get_kaztron_config() -> KaztronConfig:
     """
     Get the static configuration object for the bot. Constructs the object if needed.
     """

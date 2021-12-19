@@ -54,12 +54,20 @@ class GuildChannelField(DiscordModelField):
     """
 
     def convert(self, value) -> Union[discord.abc.GuildChannel, 'DiscordDummy']:
-        try:
-            return self.client.validate_channel(value)
-        except (ValueError, AttributeError):  # AttributeError in case client hasn't been set
+        if isinstance(value, int):
+            ch = self.client.get_channel(value)
+            errmsg = f"Channel ID {value} not found"
+        else:
+            ch = discord.utils.get(self.client.get_all_channels(), name=value)
+            errmsg = f"Channel #{value} not found"
+
+        if ch is None:
             if self.must_exist:
-                raise
-            return self._convert_dummy(value)
+                raise ValueError(errmsg)
+            else:
+                ch = self._convert_dummy(value)
+
+        return ch
 
 
 @dataclass
@@ -124,12 +132,17 @@ class RoleField(DiscordModelField):
     """
 
     def convert(self, value) -> Union[discord.Role, 'DiscordDummy']:
-        try:
-            return self.client.validate_role(value)
-        except (ValueError, AttributeError):  # AttributeError in case client hasn't been set
+        if isinstance(value, int):
+            role = self.client.guild.get_role(value)
+            errmsg = f'Role ID {value} not found'
+        else:
+            role = discord.utils.get(self.client.guild.roles, name=value)
+            errmsg = f'Role \'{value}\' not found'
+        if role is None:
             if self.must_exist:
-                raise
-            return self._convert_dummy(value)
+                raise ValueError(errmsg)
+            role = self._convert_dummy(value)
+        return role
 
 
 @dataclass

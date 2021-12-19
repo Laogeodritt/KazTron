@@ -100,7 +100,7 @@ class ConfigNodeMixin:
         return node
 
     def _update_runtime_attributes(self, field: Field):
-        for attr_name, attr_value in self.cfg_get_runtime_attributes(type(field)):
+        for attr_name, attr_value in self.cfg_get_runtime_attributes(type(field)).items():
             setattr(field, attr_name, attr_value)
 
     def cfg_set_runtime_attributes(self, FieldType: Type[Field], **kwargs):

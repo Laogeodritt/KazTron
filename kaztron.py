@@ -15,7 +15,7 @@ from kaztron.logging import setup_logging
 
 # load configuration
 try:
-    config = get_kaztron_config(kaztron.cfg_defaults)
+    config = get_kaztron_config()
 except OSError as e:
     print(str(e), file=sys.stderr)
     sys.exit(ErrorCodes.CFG_FILE)

@@ -19,7 +19,7 @@ description = "An example bot."
 # ]
 
 # Links to display in the mod-only `.modinfo` command output. These can be overridden using
-## `.modinfo add` and .`modinfo rem`.
+# `.modinfo add` and .`modinfo rem`.
 # mod_links = [
 #     { name = "Google", url = "https://google.ca" },
 # ]

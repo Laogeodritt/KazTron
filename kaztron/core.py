@@ -2,7 +2,7 @@ import asyncio
 import logging
 
 import sys
-from typing import List, Dict, Union, Tuple, Sequence
+from typing import List, Sequence
 import re
 
 import discord
@@ -12,8 +12,8 @@ import kaztron
 from kaztron import config as cfg
 from kaztron.client import CoreConfig, InfoLink
 from kaztron.errors import *
-from kaztron.help_formatter import DiscordHelpFormatter, JekyllHelpFormatter
-from kaztron.rolemanager import RoleManager
+# from kaztron.help_formatter import DiscordHelpFormatter, JekyllHelpFormatter
+# from kaztron.rolemanager import RoleManager
 from kaztron.utils.cogutils import *
 from kaztron.utils.datetime import format_timestamp, format_timedelta
 from kaztron.utils.embeds import EmbedSplitter

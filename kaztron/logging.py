@@ -5,8 +5,8 @@ import os
 
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from kaztron.client import Logging
+from kaztron.config import KaztronConfig
+from kaztron.core_config import Logging
 
 
 class LoggingInfo:
@@ -22,6 +22,7 @@ _logging_info = LoggingInfo()
 
 def setup_logging(logger, config: KaztronConfig, *, debug=False, console=True):
     global _logging_info
+    config.root.cfg_register_model('logging', Logging, required=False, lazy=False)
     cfg_logging = config.root.logging  # type: Logging
 
     if not debug:

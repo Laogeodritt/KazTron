@@ -34,7 +34,7 @@ class TomlReadOnlyStrategy:
     def read(self):
         import tomli
         with open(self.filename) as file:
-            tomli.load(file)
+            return tomli.load(file)
 
     def write(self, _):
         raise NotImplementedError

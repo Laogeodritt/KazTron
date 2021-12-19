@@ -1,4 +1,4 @@
-from . import Field, ConfigPrimitive
+from . import Field
 
 import logging
 

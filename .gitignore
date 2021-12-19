@@ -1,6 +1,8 @@
 # Project-specific files
 config.json
 config-*.json
+config.toml
+config-*.toml
 state.json
 state-*.json
 client_secret.json

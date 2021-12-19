@@ -2,6 +2,7 @@ from kaztron.utils import datetime as dt
 
 from datetime import timedelta, datetime
 
+
 class TestParseTimeDelta:
     def test_single_long_unit(self):
         assert dt.parse_timedelta("0 seconds") == timedelta(seconds=0)

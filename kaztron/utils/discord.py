@@ -1,5 +1,5 @@
 import re
-from typing import List, Sequence, Iterable, TYPE_CHECKING
+from typing import Union, Optional, TYPE_CHECKING
 
 import discord
 from discord.ext import commands
@@ -33,61 +33,22 @@ def get_discord_cfg() -> 'CoreDiscord':
     return get_kaztron_config().root.core.discord
 
 
-def check_role(rolelist: Iterable[discord.Role], message: discord.Message):
-    """
-    Check if the author of a ``message`` has one of the roles in ``rolelist``.
-
-    :param rolelist: A list of role names.
-    :param message: A :cls:``discord.Message`` object representing the message
-        to check.
-    """
-    for role in rolelist:
-        if discord.utils.get(message.author.roles, id=role.id) is not None:
-            return True
+def get_role(ctx: commands.Context, role: str) -> Optional[discord.Role]:
+    """ Get a role in the current guild by name or ID, or None if not found. """
+    if isinstance(role, int):
+        r = ctx.guild.get_role(role)
     else:
-        return False
+        r = discord.utils.get(ctx.guild.roles, name=role)
+    return r
 
 
-def get_role_by_name(guild: discord.Guild, role_name: str) -> discord.Role:
-    """
-    Get a role by name. This is a convenience function, providing a ValueError if the role does not
-    exist instead of returning None and causing a less clear exception downstream.
-
-    :param guild: Server on which to find the role
-    :param role_name: Role name to find
-    :return: Discord Role corresponding to the given name
-    :raises ValueError: role does not exist
-    """
-    role = discord.utils.get(guild.roles, name=role_name)
-    if role is None:
-        raise ValueError("Role '{!s}' not found.".format(role_name))
-    return role
-
-
-def check_mod(ctx: commands.Context):
-    """
-    Check if the sender of a command is a mod or admin (as defined by the
-    roles in the "discord" -> "mod_roles" and "discord" -> "admin_roles" configs).
-    """
-    return check_role(get_discord_cfg().mod_roles, ctx.message) or \
-        check_role(get_discord_cfg().admin_roles, ctx.message)
-
-
-def check_admin(ctx: commands.Context):
-    """
-    Check if the sender of a command is an admin (as defined by the
-    roles in the "discord" -> "admin_roles" config).
-    """
-    return check_role(get_discord_cfg().admin_roles, ctx.message)
-
-
-async def remove_role_from_all(role: discord.Role):
-    """
-    Removes a role from all users on the server who have that role.
-    :param role: Role to remove.
-    """
-    for m in role.members:
-        await m.remove_roles(role)
+def get_channel(ctx: commands.Context, ch: Union[str, int]) -> Optional[discord.TextChannel]:
+    """ Get a channel in the current guild by name or ID, or None if not found. """
+    if isinstance(ch, int):
+        ch = ctx.guild.get_channel(ch)
+    else:
+        ch = discord.utils.get(ctx.guild.channels, name=ch)
+    return ch
 
 
 def user_mention(user_id: str) -> str:
@@ -101,22 +62,18 @@ def user_mention(user_id: str) -> str:
     return '<@{}>'.format(user_id)
 
 
-def role_mention(role_id: str) -> str:
+def role_mention(role_id: int) -> str:
     """
     Return a mention for a role that can be sent over a Discord message.
     """
-    if not role_id.isnumeric():
-        raise ValueError("Discord ID must be numeric")
-    return '<@&{}>'.format(role_id)
+    return '<@&{:d}>'.format(role_id)
 
 
-def channel_mention(channel_id: str) -> str:
+def channel_mention(channel_id: int) -> str:
     """
     Return a mention for a role that can be sent over a Discord message.
     """
-    if not channel_id.isnumeric():
-        raise ValueError("Discord ID must be numeric")
-    return '<#{}>'.format(channel_id)
+    return '<#{:d}>'.format(channel_id)
 
 
 _re_user_id = re.compile(r'(?:(?:\\)?<@|@)?!?([0-9]{15,23})>?')

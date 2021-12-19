@@ -1,203 +1,389 @@
 from enum import Enum
-from typing import List, Union, Iterable, Optional
+import abc
+from typing import List, Sequence, Union
+from inspect import isawaitable
+
+import functools
 
 import discord
 from discord.ext import commands
 
-from kaztron.errors import UnauthorizedUserError, UnauthorizedChannelError, DeleteMessage, \
+from kaztron.errors import UnauthorizedUserError, UnauthorizedChannelError, \
     ModOnlyError, AdminOnlyError
-from kaztron.utils.discord import check_mod, check_admin, check_role
+from kaztron.utils.discord import get_channel, get_role
 
 import logging
 
-__all__ = ('CheckId', 'has_role', 'mod_or_has_role', 'mod_only', 'admin_only', 'in_channels',
-           'in_channels_cfg', 'mod_channels', 'admin_channels', 'pm_only')
+__all__ = ('CheckType', 'Check', 'check_any', 'delete_on_fail', 'delete_message',
+           'in_channels', 'mod_channels', 'admin_channels', 'bot_channels', 'dm_only', 'guild_only',
+           'has_role', 'mod_only', 'admin_only')
 logger = logging.getLogger('kaztron.checks')
 
 
-class CheckId(Enum):
+ConfigPath = Union[str, Sequence[str]]
+
+ChannelRef = Union[int, str]  # Channel ID or name
+ChannelRefList = List[ChannelRef]
+ChannelList = List[discord.TextChannel]
+
+RoleRef = Union[int, str]  # Channel ID or name
+RoleRefList = List[RoleRef]
+RoleList = List[discord.Role]
+
+
+class CheckType(Enum):
     """
     Identifies the type of check. Used primarily for automatic documentation generation (see
     :mod:`~kaztron.help_formatter`).
     """
-    U_ROLE = 0
-    U_MOD = 1
-    U_ADMIN = 2
-    U_ROLE_OR_MODS = 3
-    C_LIST = 10
-    C_MOD = 11
-    C_ADMIN = 12
-    C_PM_ONLY = 13
+    OTHER = 0
+    ANY = 1
+    U_ROLE = 10
+    U_MOD = 11
+    U_ADMIN = 12
+    C_LIST = 20
+    C_MOD = 21
+    C_ADMIN = 22
+    C_BOT = 23
+    C_DM = 24
+    C_GUILD = 25
 
 
-def has_role(role_names: Union[str, Iterable[str]]):
+class Check(abc.ABC):
     """
-    Command check decorator for a list of role names.
+    Base class for KazTron rich checks. These checks contain metadata for auto-documenting the
+    checks in help output, as well as other possibilities of inspecting checks on a command.
     """
-    return _check_role(role_names, False)
+    def __init__(self, check_type: CheckType, check_data=None):
+        self.type = check_type
+        self.data = check_data
+
+    @abc.abstractmethod
+    def __call__(self, ctx: commands.Context) -> bool:
+        raise NotImplementedError()
 
 
-def mod_or_has_role(role_names: Union[str, Iterable[str]]):
-    """
-    Command check decorator. Only allows mods or users with specific roles to execute this command.
-    Mods are  defined by the roles in the "discord" -> "mod_roles" and "discord" -> "admin_roles"
-    configs).
-    """
-    return _check_role(role_names, True)
+class CheckAny(Check):
+    def __init__(self, *checks):
+        self.checks = []
+        for wrapped in checks:
+            try:
+                predicate = wrapped.predicate
+            except AttributeError:
+                raise TypeError(f'{wrapped} must be wrapped by commands.check decorator') from None
+            else:
+                self.checks.append(predicate)
+        super().__init__(CheckType.ANY, self.checks)
+
+    async def __call__(self, ctx: commands.Context):
+        errors = []
+        for check in self.checks:
+            try:
+                check = check(ctx)
+                if isawaitable(check):
+                    value = await check
+                else:
+                    value = check
+            except (commands.CheckFailure, commands.CommandError) as e:
+                errors.append(e)
+            else:
+                if value:
+                    return True
+        # if we're here, all checks failed
+        raise commands.CheckAnyFailure(self.checks, errors)
 
 
-def _check_role(role_names: Union[str, Iterable[str]], with_mods: bool):
-    if isinstance(role_names, str):
-        role_names = [role_names]
+@functools.wraps(commands.check_any)
+def check_any(*checks):
+    return commands.check(CheckAny(*checks))
 
-    def check_role_wrapper(ctx: commands.Context):
-        if check_role(role_names, ctx.message) or (with_mods and check_mod(ctx)):
+
+class _ChannelDMCheck(Check):
+    def __init__(self):
+        super().__init__(CheckType.C_PM)
+
+    def __call__(self, ctx: commands.Context):
+        if isinstance(ctx.channel, discord.abc.PrivateChannel):
             return True
         else:
-            msgs = {  # (single_role, with_mods): msg
-                (True, True): "You must be a moderator or have the {r} role.",
-                (True, False): "You must have the {r} role to use that command.",
-                (False, True): "You must be a moderator or have one of these roles to use that "
-                               "command: {rl}",
-                (False, False): "You must have one of these roles to use that command: {rl}"
-            }
-            msg_fmt = msgs[(len(role_names) == 1, with_mods)]
-            raise UnauthorizedUserError(msg_fmt.format(
-                r=role_names[0] if role_names else "", rl=", ".join(role_names)
-            ))
-    check_role_wrapper.kaz_check_id = CheckId.U_ROLE_OR_MODS if with_mods else CheckId.U_ROLE
-    check_role_wrapper.kaz_check_data = role_names
-    return commands.check(check_role_wrapper)
+            raise commands.PrivateMessageOnly()
+
+
+class _ChannelGuildCheck(Check):
+    def __init__(self):
+        super().__init__(CheckType.C_GUILD)
+
+    def __call__(self, ctx: commands.Context):
+        if ctx.guild is None:
+            raise commands.NoPrivateMessage()
+        return True
+
+
+class _ChannelCheck(Check, abc.ABC):
+    """
+    Base class for command checks for channel. This checks that a given command invocation occurred
+    in an allowed channel.
+    """
+    @abc.abstractmethod
+    def get_channels(self, ctx: commands.Context) -> ChannelList:
+        raise NotImplementedError
+
+    def is_channel_allowed(self, ctx: commands.Context):
+        ch_list = self.get_channels(ctx)
+        return discord.utils.get(ch_list, id=ctx.channel.id) is not None or \
+               discord.utils.get(ch_list, name=ctx.channel.name) is not None
+
+    def __call__(self, ctx: commands.Context):
+        if self.is_channel_allowed(ctx):
+            logger.info(f"Validated command allowed in channel {ctx.channel}")
+            return True
+        else:
+            raise UnauthorizedChannelError("Command not allowed in channel.", ctx)
+
+
+class _ChannelListCheck(_ChannelCheck):
+    """ Check that a command was invoked in one of a list of permitted channels. """
+    def __init__(self, channels: ChannelRefList, check_type=CheckType.C_LIST):
+        super().__init__(check_type, channels)
+
+    def get_channels(self, ctx: commands.Context) -> ChannelList:
+        return [get_channel(ctx, ch_id) for ch_id in self.data]
+
+
+class _ChannelConfigCheck(_ChannelCheck):
+    def __init__(self, config_path: ConfigPath, check_type=CheckType.C_LIST):
+        try:
+            self.config_path = config_path.split('.')
+        except AttributeError:
+            self.config_path = config_path
+        super().__init__(check_type, self.config_path)
+
+    def get_channels(self, ctx: commands.Context) -> ChannelList:
+        return ctx.cog.config.traverse(*self.config_path)
+
+
+class _ChannelConfigRootCheck(_ChannelConfigCheck):
+    def get_channels(self, ctx: commands.Context) -> ChannelList:
+        return ctx.bot.config.root.traverse(*self.config_path)
+
+
+class _ChannelStateCheck(_ChannelConfigCheck):
+    def get_channels(self, ctx: commands.Context) -> ChannelList:
+        return ctx.cog.state.traverse(*self.config_path)
+
+
+class _ChannelCogStateCheck(_ChannelConfigCheck):
+    def get_channels(self, ctx: commands.Context) -> ChannelList:
+        return ctx.cog.cog_state.traverse(*self.config_path)
+
+
+class _BotChannelCheck(_ChannelCheck):
+    def get_channels(self, ctx: commands.Context) -> ChannelList:
+        return [ctx.bot.config.root.core.discord.channel_public]
+
+
+def in_channels(*,
+                channels: ChannelRefList = None,
+                config: ConfigPath = None,
+                state: ConfigPath = None,
+                cog_state: ConfigPath = None):
+    """
+    Command check decorator: only allow this command to be run in specific channels. This can be
+    passed as a list of channel IDs/names or as a config path to such a list (in the config,
+    state or cog_state files). Only one argument should be passed per decorator.
+
+    :param channels: List of channel IDs (as integers) and/or names (string, without leading #).
+    :param config: A config path in the main configuration file. This path is relative to the
+        CURRENT COG's config section, not the root. It can be passed as a dot-separated string
+        like ``"a.b.channels"`` or a tuple/list like ``("a", "b", "channels")``.
+    :param state: A config path in the global state file. Same as the ``config`` parameter.
+    :param cog_state: A config path in the cog's local state file. Same as the ``config`` parameter,
+        but relative to the file's root.
+    """
+    if channels is not None:
+        return commands.check(_ChannelListCheck(channels))
+    if config is not None:
+        return commands.check(_ChannelConfigCheck(config))
+    if state is not None:
+        return commands.check(_ChannelStateCheck(state))
+    if cog_state is not None:
+        return commands.check(_ChannelCogStateCheck(cog_state))
+
+
+def mod_channels():
+    """
+    A command check that indicates this command can only be called in mod channels, as configured
+    in ``config.toml:core.discord.mod_channels``.
+    """
+    return commands.check(_ChannelConfigRootCheck("core.discord.mod_channels"))
+
+
+def admin_channels():
+    """
+    A command check that indicates this command can only be called in admin channels, as configured
+    in ``config.toml:core.discord.admin_channels``.
+    """
+    return commands.check(_ChannelConfigRootCheck("core.discord.admin_channels"))
+
+
+def bot_channels():
+    """
+    A command check that indicates this command can only be called in bot channels, as configured
+    in ``config.toml:core.discord.public_channel``.
+    """
+    return commands.check(_BotChannelCheck())
+
+
+def dm_only():
+    """
+    A command check that indicates this command must only be invoked in DM. Raises an
+    :exc:`commands.PrivateMessageOnly` exception on failure.
+
+    To allow DM or specific channels, use :func:`check_any` along with any channel checks.
+    """
+    return commands.check(_ChannelDMCheck())
+
+
+def guild_only():
+    """
+    A command check that indicates this command must only be used in guild channels, not in
+    private messages. Raises an :exc:`commands.NoPrivateMessage` exception on failure.
+    """
+    return commands.check(_ChannelGuildCheck())
+
+
+class _RoleCheck(Check, abc.ABC):
+    """
+    Base class for command checks for invoker's role. This checks that a given command invocation
+    was made by a user with a permitted role.
+    """
+    ERR_MAP = {
+        CheckType.U_ROLE: UnauthorizedUserError,
+        CheckType.U_MOD: ModOnlyError,
+        CheckType.U_ADMIN: AdminOnlyError
+    }
+
+    @abc.abstractmethod
+    def get_roles(self, ctx: commands.Context) -> RoleList:
+        raise NotImplementedError
+
+    def __call__(self, ctx: commands.Context):
+        for role in self.get_roles(ctx):
+            if role in ctx.author.roles:
+                logger.info(f"Authorized user {ctx.author.id} via role {role.name}")
+                return True
+        raise self.ERR_MAP[self.type]("Command not allowed in channel.", ctx)
+
+
+class _RoleListCheck(_RoleCheck):
+    """ Check that a command was invoked by a user with one of the listed roles.. """
+    def __init__(self, roles: RoleRefList, check_type=CheckType.U_ROLE):
+        super().__init__(check_type, roles)
+
+    def get_roles(self, ctx: commands.Context) -> RoleList:
+        return [get_role(ctx, ch_id) for ch_id in self.data]
+
+
+class _RoleConfigCheck(_RoleCheck):
+    def __init__(self, config_path: ConfigPath, check_type=CheckType.U_ROLE):
+        try:
+            self.config_path = config_path.split('.')
+        except AttributeError:
+            self.config_path = config_path
+        super().__init__(check_type, self.config_path)
+
+    def get_roles(self, ctx: commands.Context) -> RoleList:
+        return ctx.cog.config.traverse(*self.config_path)
+
+
+class _RoleConfigRootCheck(_RoleConfigCheck):
+    def get_roles(self, ctx: commands.Context) -> RoleList:
+        return ctx.bot.config.root.traverse(*self.config_path)
+
+
+class _RoleStateCheck(_ChannelConfigCheck):
+    def get_roles(self, ctx: commands.Context) -> RoleList:
+        return ctx.cog.state.traverse(*self.config_path)
+
+
+class _RoleCogStateCheck(_ChannelConfigCheck):
+    def get_roles(self, ctx: commands.Context) -> RoleList:
+        return ctx.cog.cog_state.traverse(*self.config_path)
+
+
+def has_role(roles: RoleRefList):
+    """
+    A command check that indicates that this command must be invoked by someone with any of a list
+    of roles.
+    """
+    return commands.check(_RoleListCheck(roles))
 
 
 def mod_only():
     """
     Command check decorator. Only allow mods and admins to execute this command (as defined by the
-    roles in the "discord" -> "mod_roles" and "discord" -> "admin_roles" configs).
+    roles defined as ``config.toml:core.discord.mod_roles`` and ``.admin_roles``.
     """
-    def check_mod_wrapper(ctx):
-        if check_mod(ctx):
-            return True
-        else:
-            raise ModOnlyError("Only moderators may use that command.")
-    check_mod_wrapper.kaz_check_id = CheckId.U_MOD
-    return commands.check(check_mod_wrapper)
+    return commands.check(CheckAny(_mod_roles(), _admin_roles()))
 
 
 def admin_only():
     """
-    Command check decorator. Only allow admins to execute this command (as defined by the
-    roles in the "discord" -> "admin_roles" config).
+    Command check decorator. Only allow mods to execute this command (as defined by the
+    roles defined as ``config.toml:core.discord.mod_roles`` and ``.admin_roles``.
     """
-    def check_admin_wrapper(ctx):
-        if check_admin(ctx):
-            return True
-        else:
-            raise AdminOnlyError("Only administrators may use that command.", ctx)
-    check_admin_wrapper.kaz_check_id = CheckId.U_ADMIN
-    return commands.check(check_admin_wrapper)
+    return _admin_roles()
 
 
-def in_channels(channel_id_list: List[int], allow_pm=False, delete_on_fail=False, *,
-                check_id=CheckId.C_LIST):
+def _mod_roles():
+    return commands.check(_RoleConfigRootCheck('core.discord.mod_roles', CheckType.U_MOD))
+
+
+def _admin_roles():
+    return commands.check(_RoleConfigRootCheck('core.discord.admin_roles', CheckType.U_ADMIN))
+
+
+# TODO: keep these messages for check failures in error handler
+# msgs = {  # (single_role, with_mods): msg
+#     (True, True): "You must be a moderator or have the {r} role.",
+#     (True, False): "You must have the {r} role to use that command.",
+#     (False, True): "You must be a moderator or have one of these roles to use that "
+#                    "command: {rl}",
+#     (False, False): "You must have one of these roles to use that command: {rl}"
+# }
+
+# TODO: make use of kt_delete_on_fail in error handler
+# TODO: make use of delete_message in the appropriate place
+
+
+def delete_on_fail():
     """
-    Command check decorator. Only allow this command to be run in specific channels (passed as a
-    list of channel ID strings).
+    Command decorator. If a check fails, delete the command invocation message.
     """
-    def predicate(ctx: commands.Context):
-        pm_exemption = allow_pm and isinstance(ctx.channel, discord.abc.PrivateChannel)
-        if ctx.channel.id in channel_id_list or pm_exemption:
-            logger.info(
-                "Validated command in allowed channel {!s}".format(ctx.message.channel)
+    def decorator(cmd):
+        if not isinstance(cmd, commands.Command):
+            raise ValueError("@delete_on_fail must be above the discord command or group decorator")
+        cmd.kt_delete_on_fail = True
+    return decorator
+
+
+def delete_message():
+    """ Command decorator. Always delete the command invocation message. """
+    async def delete_invoking_message(ctx: commands.Context):
+        try:
+            await ctx.message.delete()
+        except discord.Forbidden:
+            logger.warning(f"Cannot delete invoking message in #{ctx.channel.name}")
+            await ctx.bot.channel_out.send(
+                "Cannot delete invoking message in "
+                f"{ctx.channel.mention}: {ctx.channel.jump_url}"
             )
-            return True
-        else:
-            if not delete_on_fail:
-                raise UnauthorizedChannelError("Command not allowed in channel.", ctx)
-            else:
-                raise DeleteMessage(
-                    UnauthorizedChannelError("Command not allowed in channel.", ctx))
-    predicate.kaz_check_id = check_id
-    predicate.kaz_check_data = channel_id_list
-    return commands.check(predicate)
 
+    def decorator(cmd):
+        if not isinstance(cmd, commands.Command):
+            raise ValueError("@delete_on_fail must be above the discord command or group decorator")
 
-def in_channels_cfg(config_path: Optional[Iterable[str]], allow_pm=False, delete_on_fail=False, *,
-                    include_mods=False, include_admins=False, include_bot=False,
-                    check_id=CheckId.C_LIST):
-    """
-    Command check decorator. Only allow this command to be run in specific channels (as specified
-    from the config).
+        # TODO: can only register one before_invoke - better solutions?
+        cmd.before_invoke(delete_invoking_message)
 
-    The configuration can point to either a single channel ID string or a list of channel ID
-    strings.
-l
-    :param config_path: The path to a list of channels in the config. This will only access the
-        static (config.toml) config. Can be None (if only using include_* parameters).
-    :param allow_pm: Allow this command in PMs, as well as the configured channels
-    :param delete_on_fail: If this check fails, delete the original message. This option does not
-        delete the message itself, but throws an UnauthorizedChannelDelete error to allow an
-        ``on_command_error`` handler to take appropriate action.
-    :param include_mods: Also include mod channels.
-    :param include_admins: Also include admin channels.
-    :param include_bot: Also include bot and test channels.
-    :param check_id: Type of check, for the purpose of automatic documentation generation.
-
-    :raise UnauthorizedChannelError:
-    :raise UnauthorizedChannelDelete:
-    """
-    from kaztron.config import get_kaztron_config
-    discord_config = get_kaztron_config().root.core.discord
-
-    if config_path:
-        config_channels = get_kaztron_config().root.traverse(*config_path)
-    else:
-        config_channels = []
-
-    if isinstance(config_channels, str):
-        config_channels = [config_channels]
-
-    if include_mods:
-        config_channels.extend(discord_config.mod_channels)
-    if include_admins:
-        config_channels.extend(discord_config.admin_channels)
-    if include_bot:
-        config_channels.append(discord_config.channel_test)
-        config_channels.append(discord_config.channel_public)
-
-    return in_channels(config_channels, allow_pm, delete_on_fail, check_id=check_id)
-
-
-def mod_channels(delete_on_fail=False):
-    """
-    Command check decorator. Only allow this command to be run in mod channels (as configured
-    in "discord" -> "mod_channels" config).
-    """
-    return in_channels_cfg(None, include_mods=True, allow_pm=True,
-        delete_on_fail=delete_on_fail, check_id=CheckId.C_MOD)
-
-
-def admin_channels(delete_on_fail=False):
-    """
-    Command check decorator. Only allow this command to be run in admin channels (as configured
-    in "discord" -> "admin_channels" config).
-    """
-    return in_channels_cfg(None, include_admins=True, allow_pm=True,
-        delete_on_fail=delete_on_fail, check_id=CheckId.C_ADMIN)
-
-
-def pm_only(delete_on_fail=False):
-    """
-    Command check decorator. Only allow this command in PMs.
-    """
-    def predicate(ctx: commands.Context):
-        if isinstance(ctx.channel, discord.abc.PrivateChannel):
-            return True
-        else:
-            if not delete_on_fail:
-                raise UnauthorizedChannelError("Command only allowed in PMs.", ctx)
-            else:
-                raise DeleteMessage(UnauthorizedChannelError("Command only allowed in PMs.", ctx))
-    predicate.kaz_check_id = CheckId.C_PM_ONLY
-    predicate.kaz_check_data = tuple()
-    return commands.check(predicate)
+    return decorator

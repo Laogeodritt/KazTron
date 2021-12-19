@@ -3,6 +3,7 @@ dateparser~=0.7.0
 sqlalchemy>=1.2
 pytest>=3.0.0
 pytest-mock>=1.10.0
+pytest-asyncio
 python-daemon~=2.2.0
 ruamel.yaml~=0.16.0
 google-api-python-client~=1.7.10

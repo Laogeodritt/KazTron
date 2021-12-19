@@ -15,7 +15,7 @@ from ruamel.yaml import YAML, YAMLError
 from discord.ext import commands
 
 from kaztron.config import get_kaztron_config, SectionView
-from kaztron.utils.checks import CheckId
+from kaztron.utils.checks import CheckType
 from kaztron.utils.discord import get_role_by_name, get_command_prefix
 from kaztron.utils.logging import exc_log_str
 from .kazcog import KazCog
@@ -319,7 +319,7 @@ class CoreHelpParser:
                 check_data = []
 
             # process check_type
-            if check_type is CheckId.U_ROLE or check_type is CheckId.U_ROLE_OR_MODS:
+            if check_type is CheckType.U_ROLE or check_type is CheckType.U_ROLE_OR_MODS:
                 for role_name in check_data:
                     for server in bot.servers:
                         try:
@@ -330,16 +330,16 @@ class CoreHelpParser:
                             continue
                     else:
                         roles.append(role_name + ' (not found)')
-                if check_type is CheckId.U_ROLE_OR_MODS:
+                if check_type is CheckType.U_ROLE_OR_MODS:
                     roles.append('Moderators')
                     roles.append('Administrators')
-            elif check_type is CheckId.U_MOD:
+            elif check_type is CheckType.U_MOD:
                 roles = ['Moderators', 'Administrators']
                 new_brief = '[MOD ONLY] ' + data['brief']
-            elif check_type is CheckId.U_ADMIN:
+            elif check_type is CheckType.U_ADMIN:
                 roles = ['Administrators']
                 new_brief = '[ADMIN ONLY] ' + data['brief']
-            elif check_type is CheckId.C_LIST:
+            elif check_type is CheckType.C_LIST:
                 for ch_id in check_data:
                     ch = bot.get_channel(ch_id)  # type: discord.Channel
                     if ch is not None:
@@ -347,13 +347,13 @@ class CoreHelpParser:
                         break
                     else:
                         channels.append(ch_id + ' (not found)')
-            elif check_type is CheckId.C_MOD:
+            elif check_type is CheckType.C_MOD:
                 channels = ['Mod channels']
                 new_brief = '[MOD ONLY] ' + data['brief']
-            elif check_type is CheckId.C_ADMIN:
+            elif check_type is CheckType.C_ADMIN:
                 channels = ['Admin channels']
                 new_brief = '[ADMIN ONLY] ' + data['brief']
-            elif check_type is CheckId.C_PM_ONLY:
+            elif check_type is CheckType.C_PM_ONLY:
                 channels = ['PM only']
                 new_brief = '[PM ONLY]' + data['brief']
 

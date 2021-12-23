@@ -518,9 +518,11 @@ class ConfigModelField(Field):
         if type is None:
             raise ValueError('type must be specified')
 
-    def convert(self, value: dict) -> 'ConfigModel':
+    def convert(self, value: dict, parent: 'ConfigNodeMixin' = None) -> 'ConfigModel':
         conv_obj = self.type()
         conv_obj.cfg_set_field(self)
+        if parent:
+            conv_obj.cfg_set_parent(parent)
         conv_obj.cfg_set_data(value)
         return conv_obj
 

@@ -12,7 +12,7 @@ __all__ = ['Logging', 'InfoLink', 'BotStatus', 'CoreDaemon', 'CoreConfig', 'Core
 
 class Logging(cfg.ConfigModel):
     file: str = cfg.StringField(default="kaztron.log")
-    level: str = cfg.LogLevelField(default="INFO")
+    level: int = cfg.LogLevelField(default="INFO")
     max_size_kb: int = cfg.IntegerField(default=0)
     max_backups: int = cfg.IntegerField(default=0)
     gzip_backups: bool = cfg.BooleanField(default=False)

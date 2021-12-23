@@ -551,4 +551,4 @@ class CoreCog(kaztron.KazCog):
 
 def setup(bot):
     bot.add_cog(CoreCog(bot))
-    bot.add_cog(RoleManager(bot))
+#    bot.add_cog(RoleManager(bot))

@@ -66,8 +66,7 @@ class ConfigNodeMixin:
         """
         self._update_runtime_attributes(field)
         if isinstance(field, ConfigModelField):
-            node = field.convert(raw_value)
-            node.cfg_set_parent(self)
+            node = field.convert(raw_value, self)
             return node
         elif isinstance(field, DictField):
             if not isinstance(raw_value, dict):
@@ -291,11 +290,11 @@ class ConfigModel(ConfigNodeMixin, metaclass=ConfigModelMeta):
     def clear_cache(self):
         """ Clear cache of read objects. If non-lazy, also re-convert all fields."""
         self._converted.clear()
-        logging.info(f"{self!s}: Cache cleared.")
+        logger.info(f"{self!s}: Cache cleared.")
 
         # pre-convert all keys, if not lazy
         if not self.__config_field__.lazy:
-            logging.info(f"{self!s}: Converting all data (non-lazy)...")
+            logger.info(f"{self!s}: Converting all data (non-lazy)...")
             # convert all defined keys in data
             for key in self.keys():
                 self.get(key)
@@ -338,7 +337,7 @@ class ConfigModel(ConfigNodeMixin, metaclass=ConfigModelMeta):
             if field.required:
                 raise ConfigKeyError(self.cfg_file, self.cfg_path, field.name) from e
             else:
-                logging.warning(f"{self!s}: Key '{key}' not found, using default.")
+                logger.warning(f"{self!s}: Key '{key}' not found, using default.")
                 raw_value = copy(field.default)
         else:
             if self.__config_field__.strict_keys and key not in self.cfg_field_keys():
@@ -362,7 +361,7 @@ class ConfigModel(ConfigNodeMixin, metaclass=ConfigModelMeta):
         if self.cfg_read_only:
             raise ReadOnlyError(self.cfg_file)
 
-        logging.info(f"{self!s}: Set key {key}")
+        logger.info(f"{self!s}: Set key {key}")
 
         field = self.cfg_get_field(key)
         # strict_keys
@@ -463,7 +462,7 @@ class ConfigRoot(ConfigModel):
             kwargs['name'] = key
         kwargs['type'] = model
         self.__config_fields__[key] = field = ConfigModelField(**kwargs)
-        logging.info(f"ConfigRoot({self.cfg_file}): registered key '{key}' to field {field}")
+        logger.info(f"ConfigRoot({self.cfg_file}): registered key '{key}' to field {field}")
 
         if not field.lazy:
             self.get(key)
@@ -546,7 +545,7 @@ class ConfigList(ConfigNodeMixin, MutableSequence):
         else:
             self._converted = None
             self._convert_map = None
-        logging.info(f"{self!s}: Cache cleared.")
+        logger.info(f"{self!s}: Cache cleared.")
 
     def __len__(self):
         return len(self._serialized_data)
@@ -665,7 +664,7 @@ class ConfigDict(ConfigNodeMixin, MutableMapping):
             self._converted = {}
         elif self._serialized_data is not None:  # allows for clearing data by setting data to None
             self._converted = self.__config_field__.convert(self._serialized_data)
-        logging.info(f"{self!s}: Cache cleared.")
+        logger.info(f"{self!s}: Cache cleared.")
 
     def __iter__(self):
         return iter(self._serialized_data)  # iterates over keys

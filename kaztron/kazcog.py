@@ -1,4 +1,4 @@
-from typing import Type, Dict, TYPE_CHECKING
+from typing import Type, Dict, Optional, TYPE_CHECKING
 
 import logging
 from enum import Enum
@@ -49,7 +49,7 @@ class KazCog(commands.Cog):
         self._cmd_logger = logging.getLogger("kaztron.commands")
 
         # state variables
-        self._status = CogStatus.NONE  # type: CogStatus
+        self._status = CogStatus.INIT  # type: CogStatus
 
         # config stuff
         self._section = None  # type: str
@@ -68,7 +68,7 @@ class KazCog(commands.Cog):
         if config_model:
             self.bot.config.root.cfg_register_model(self._section, config_model)
         if state_model:
-            self.bot.state.cfg_register_model(self._section, state_model)
+            self.bot.state.root.cfg_register_model(self._section, state_model)
         self._config = self.bot.config.root.get(self._section)
         self._state = self.bot.state.root.get(self._section)
 
@@ -97,7 +97,7 @@ class KazCog(commands.Cog):
         return self._state
 
     @property
-    def cog_state(self) -> ConfigRoot:
+    def cog_state(self) -> Optional[ConfigRoot]:
         """
         The custom state file set up by :meth:`~.setup_cog_state`. If not set up, returns None.
 
@@ -105,7 +105,10 @@ class KazCog(commands.Cog):
         :cls:`ConfigRoot` object model for the config file, which supports custom-defined ORM-
         style class definitions for its contents.
         """
-        return self._cog_state.root
+        try:
+            return self._cog_state.root
+        except AttributeError:
+            return None
 
     def setup_cog_state(self, name, defaults=None):
         """
@@ -156,7 +159,7 @@ class KazCog(commands.Cog):
     @commands.Cog.listener('on_ready')
     async def _on_ready_init(self):
         try:
-            self._on_ready_validate_config_converters()
+            self._on_ready_validate_config()
             await self.on_ready_validate()
         except Exception as e:
             self._status = CogStatus.ERR_READY
@@ -171,12 +174,10 @@ class KazCog(commands.Cog):
         finally:
             self.bot.notify_cog_ready(self)
 
-    def _on_ready_validate_config_converters(self):
-        for key in self.config.converter_keys():
-            self.config.get(key)
-        for key in self.state.converter_keys():
-            self.state.get(key)
-        logger.debug("Configuration converters validated.")
+    def _on_ready_validate_config(self):
+        # clear_cache() also re-converts non-lazy keys, providing a first layer of validation
+        self.config.clear_cache()
+        self.state.clear_cache()
 
     async def on_ready_validate(self):
         """
@@ -187,7 +188,7 @@ class KazCog(commands.Cog):
         remain in a disabled state.
 
         In the case that initialisation steps need to be taken at ``on_ready`` time and failure of
-        these steps is unlikely or doesn't need for the cog to remain disabled, it may be preferable
+        these steps is unlikely or are not critical to the cog's operation, it may be preferable
         to define an ``on_ready`` listener instead.
 
         KazCog will, by default, always FIRST test all keys in the :attr:`config` and :attr:`state`

@@ -134,6 +134,7 @@ class KaztronConfig:
                 raise
         else:
             self._data.update(Munch.fromDict(read_data))
+            logger.debug(self._data)
             self.is_dirty = False
         self._root.cfg_set_data(self._data)
 

@@ -22,6 +22,8 @@ _logging_info = LoggingInfo()
 
 def setup_logging(logger, config: KaztronConfig, *, debug=False, console=True):
     global _logging_info
+
+    # set up access to logging configuration and read configuration
     config.root.cfg_register_model('logging', Logging, required=False, lazy=False)
     cfg_logging = config.root.logging  # type: Logging
 
@@ -33,12 +35,13 @@ def setup_logging(logger, config: KaztronConfig, *, debug=False, console=True):
 
     logger.setLevel(cfg_level)
     _logging_info.cfg_level = cfg_level
-
-    # Specific packages
-    _logging_info.cfg_packages = cfg_logging.tags
+    _logging_info.cfg_packages = cfg_logging.tags  # level overrides for specific packages
 
     for name, s_value in _logging_info.cfg_packages.items():
         logging.getLogger(name).setLevel(max(s_value, cfg_level))
+
+    # remove any existing handlers
+    logging.getLogger().handlers.clear()
 
     # File handler
     fh = logging.handlers.RotatingFileHandler(
@@ -56,7 +59,7 @@ def setup_logging(logger, config: KaztronConfig, *, debug=False, console=True):
     logger.addHandler(fh)
     _logging_info.file_handler = fh
 
-    # Console handler - fixed log level
+    # Console handler
     if console or debug:
         import sys
         ch = logging.StreamHandler(stream=sys.stdout)
@@ -65,6 +68,8 @@ def setup_logging(logger, config: KaztronConfig, *, debug=False, console=True):
         ch.setFormatter(ch_formatter)
         logger.addHandler(ch)
         _logging_info.console_handler = ch
+
+    _logging_info.is_setup = True
 
 
 def get_logging_info() -> LoggingInfo:

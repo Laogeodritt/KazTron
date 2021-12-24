@@ -9,19 +9,13 @@ from typing import Callable, Union, Dict, Awaitable, Any, List, Sequence, Mappin
 import discord
 from discord.ext import commands
 
-from kaztron.utils.asyncio import datetime2loop
+from kaztron.utils.asyncio import datetime2loop, current_task
 
 logger = logging.getLogger(__name__)
 
 TaskFunction = Union[
     Callable[[], Awaitable[None]],
     Callable[[Any], Awaitable[None]]]  #: async def name() -> None
-
-try:
-    current_task = asyncio.current_task
-except AttributeError:  # Python < 3.7
-    def current_task(*args, **kwargs):
-        return asyncio.Task.current_task(*args, **kwargs)
 
 
 class Task(Hashable):

@@ -8,6 +8,7 @@ import kaztron
 from kaztron import KazClient
 from kaztron.config import get_kaztron_config, KaztronConfig, get_runtime_config
 from kaztron.discord_patches import apply_patches
+from kaztron.utils.asyncio import all_tasks
 
 __all__ = ('ErrorCodes', 'run_kaztron', 'get_daemon_context')
 logger = logging.getLogger("kaztron.bootstrap")
@@ -62,7 +63,7 @@ def run_kaztron(loop: asyncio.AbstractEventLoop):
         # 09bd2f4de7cccbd5d33f61e5257e1d4dc96b5caa/discord/client.py#L517
         #
         # Original code Copyright (c) 2015-2016 Rapptz. MIT licence.
-        pending = asyncio.Task.all_tasks(loop=loop)
+        pending = all_tasks(loop=loop)
         gathered = asyncio.gather(*pending, loop=loop, return_exceptions=True)
         # noinspection PyBroadException
         try:

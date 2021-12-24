@@ -3,6 +3,12 @@ from datetime import datetime
 
 from kaztron.utils.datetime import utctimestamp
 
+try:
+    from asyncio import current_task, all_tasks
+except ImportError:  # Python <= 3.7
+    current_task = asyncio.Task.current_task
+    all_tasks = asyncio.Task.all_tasks
+
 
 def loop2timestamp(loop_time: float, loop: asyncio.AbstractEventLoop=None) -> float:
     if loop is None:

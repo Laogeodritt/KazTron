@@ -71,9 +71,12 @@ class KaztronConfig:
         :param file_strategy:
         :param read_only:
         """
+        class InstanceConfigRoot(ConfigRoot):
+            pass
+
         self._data = None
         self._file_strategy = file_strategy(filename)
-        self._root = ConfigRoot(self)
+        self._root = InstanceConfigRoot(self)
         self._read_only = read_only
         self.is_dirty = False
         self.read()

@@ -81,6 +81,7 @@ class TextChannelField(GuildChannelField):
     """
 
     def convert(self, value) -> Union[discord.TextChannel, 'DiscordDummy']:
+        from kaztron.config import DiscordDummy
         obj = super().convert(value)
         if not isinstance(obj, (discord.TextChannel, DiscordDummy)):
             raise TypeError("must be a text channel", value)
@@ -98,6 +99,7 @@ class VoiceChannelField(GuildChannelField):
     """
 
     def convert(self, value) -> Union[discord.VoiceChannel, 'DiscordDummy']:
+        from kaztron.config import DiscordDummy
         obj = super().convert(value)
         if not isinstance(obj, (discord.VoiceChannel, DiscordDummy)):
             raise TypeError("must be a voice channel", value)
@@ -115,6 +117,7 @@ class CategoryChannelField(GuildChannelField):
     """
 
     def convert(self, value) -> Union[discord.CategoryChannel, 'DiscordDummy']:
+        from kaztron.config import DiscordDummy
         obj = super().convert(value)
         if not isinstance(obj, (discord.CategoryChannel, DiscordDummy)):
             raise TypeError("must be a category", value)

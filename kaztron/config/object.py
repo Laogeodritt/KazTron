@@ -245,6 +245,11 @@ class ConfigModel(ConfigNodeMixin, metaclass=ConfigModelMeta):
     """
     __config_field__: ConfigModelField
 
+    def __new__(cls, *args, **kwargs):
+        if cls is ConfigModel:
+            raise TypeError("Cannot instantiate ConfigModel directly")
+        return super().__new__(cls)
+
     def __init__(self, **kwargs):
         super().__init__()
         self.__config_field__ = ConfigModelField(name='Unassigned', type=self.__class__)  # default
@@ -439,9 +444,20 @@ class ConfigModel(ConfigNodeMixin, metaclass=ConfigModelMeta):
 
 class ConfigRoot(ConfigModel):
     """
-    ConfigModel which represents the root of a configuration file. Instances are provided
-    by the framework; this class should typically not be instantiated directly.
+    ConfigModel which represents the root of a configuration file.
+
+    This class should only be instantiated or inherited by the framework, and not by users of the
+    config library.
+
+    Within this framework, ConfigRoot must never be directly instantiated. A new subclass of
+    ConfigRoot should be generated for each config file root. (This is in keeping with the
+    ConfigModel metaclass assumption that each class represents a *specific* config subtree.)
     """
+
+    def __new__(cls, *args, **kwargs):
+        if cls is ConfigRoot:
+            raise TypeError("Cannot instantiate ConfigRoot directly")
+        return super().__new__(cls, *args, **kwargs)
 
     def __init__(self, config: 'KaztronConfig'):
         super().__init__()

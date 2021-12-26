@@ -295,7 +295,7 @@ class ConfigModel(ConfigNodeMixin, metaclass=ConfigModelMeta):
     def clear_cache(self):
         """ Clear cache of read objects. If non-lazy, also re-convert all fields."""
         self._converted.clear()
-        logger.info(f"{self!s}: Cache cleared.")
+        logger.debug(f"{self!s}: Cache cleared.")
 
         # pre-convert all keys, if not lazy
         if not self.__config_field__.lazy:
@@ -561,7 +561,7 @@ class ConfigList(ConfigNodeMixin, MutableSequence):
         else:
             self._converted = None
             self._convert_map = None
-        logger.info(f"{self!s}: Cache cleared.")
+        logger.debug(f"{self!s}: Cache cleared.")
 
     def __len__(self):
         return len(self._serialized_data)
@@ -680,13 +680,26 @@ class ConfigDict(ConfigNodeMixin, MutableMapping):
             self._converted = {}
         elif self._serialized_data is not None:  # allows for clearing data by setting data to None
             self._converted = self.__config_field__.convert(self._serialized_data)
-        logger.info(f"{self!s}: Cache cleared.")
+        logger.debug(f"{self!s}: Cache cleared.")
+
+    @property
+    def _serialized_merged(self):
+        if not self.__config_field__.merge_defaults:
+            return self._serialized_data
+        merged = {}
+        try:
+            merged.update(self.__config_field__.default)
+        except TypeError:
+            pass  # no defaults
+        merged.update(self._serialized_data)
+        return merged
 
     def __iter__(self):
-        return iter(self._serialized_data)  # iterates over keys
+        # iterates over keys, so no need to worry about converting the values
+        return iter(self._serialized_merged)
 
     def __len__(self):
-        return len(self._serialized_data)
+        return len(self._serialized_merged)
 
     def _convert_child_node(self, field: Field, raw_value: ConfigPrimitive, key: str=None) -> Any:
         node_field = copy(field)
@@ -702,8 +715,17 @@ class ConfigDict(ConfigNodeMixin, MutableMapping):
             # (non-lazy conversion can happen before root/parent are set)
             self._update_child_node(field, obj_item)
         except KeyError:
-            obj_item = self._convert_child_node(field, self._serialized_data[key], key)
-            self._converted[key] = obj_item
+            try:
+                raw_value = self._serialized_data[key]
+            except KeyError:
+                default = self.__config_field__.default
+                try:
+                    raw_value = default[key]
+                except (KeyError, TypeError):
+                    raise KeyError(key) from None
+            finally:
+                obj_item = self._convert_child_node(field, raw_value, key)
+                self._converted[key] = obj_item
         return obj_item
 
     def __setitem__(self, key: str, obj_value):
@@ -724,7 +746,12 @@ class ConfigDict(ConfigNodeMixin, MutableMapping):
         self.cfg_notify_update(self.__config_field__.name, self._serialized_data)
 
     def __delitem__(self, key: str):
-        del self._serialized_data[key]
+        try:
+            del self._serialized_data[key]
+        except KeyError:
+            if key in self:  # default value
+                raise KeyError(key, "Default keys cannot be deleted") from None
+            raise  # not a default value - normal KeyError
         try:
             del self._converted[key]
         except KeyError:

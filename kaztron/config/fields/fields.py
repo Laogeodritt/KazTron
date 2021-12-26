@@ -482,7 +482,12 @@ class DictField(ContainerField):
     validate values and can contain mixed primitive types. If the ``type`` attribute is defined as
     any :cls:`Field`, then the dict will be converted and validated using that Field object, and
     can only contain compatible values.
+
+    If ``merge_defaults`` is True, then keys in the ``default`` parameter are merged into the
+    config file when reading (they are not written to file unless modified). If False (default),
+    then the defaults are only used if this dict is entirely unspecified in the config file.
     """
+    merge_defaults: bool = False
 
     def convert(self, raw_dict: Dict[str, ConfigPrimitive]) -> Dict[str, Any]:
         return {key: self.type.convert(raw_item) for key, raw_item in raw_dict.items()}

@@ -805,10 +805,10 @@ def dict_fixture() -> DictField:
 
 class TestDictField:
     def test_default_constructor(self):
-        ListField()
+        DictField()
 
     def test_full_constructor(self):
-        f = ListField(name='blah', default='default', required=True, lazy=False)
+        f = DictField(name='blah', default='default',merge_defaults=False, required=True, lazy=False)
         assert f.name == 'blah'
         assert f.default == 'default'
         assert f.required

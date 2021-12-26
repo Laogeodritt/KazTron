@@ -45,6 +45,10 @@ def model_fixture() -> ConfigModelFixture:
                 'dict': {'a': 32, 'b': 33, 'c': 34, 'd': 35},
                 'meowmap': {'x': {'a': 1, 'b': 2}, 'y': {'a': 3, 'b': 4}, 'z': {'a': 5, 'b': 6}}
             },
+            'dict_default': {
+                'overwrite': 12,
+                'new': 15
+            },
             'enable_feature': False,
             'enable_horrors': True
         }
@@ -66,6 +70,8 @@ def model_fixture() -> ConfigModelFixture:
         nest: Nest = ConfigModelField(type=Nest)
         enable_feature: bool = BooleanField()
         enable_horrors: bool = BooleanField()
+        dict_default: Dict[str, int] = DictField(type=IntegerField(), merge_defaults=True,
+            default = {'default': -1, 'overwrite': 0})
 
     class Asdf(ConfigModel):
         four: int = IntegerField()
@@ -544,3 +550,11 @@ class TestConfigDict:
         assert el.__config_parent__ is d
         assert el.cfg_path == ('jkl', 'nest', 'meowmap', 'x')
         assert el.cfg_file == 'mock_file.cfg'
+
+    def test_merged_defaults(self, model_fixture: ConfigModelFixture):
+        d: ConfigDict = model_fixture.object.jkl.dict_default
+        assert d['default'] == -1
+        assert d['new'] == 15
+        assert d['overwrite'] == 12
+        assert len(d) == 3
+        assert set(iter(d)) == {'default', 'new', 'overwrite'}

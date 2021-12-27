@@ -16,7 +16,7 @@ class Logging(cfg.ConfigModel):
     max_size_kb: int = cfg.IntegerField(default=0)
     max_backups: int = cfg.IntegerField(default=0)
     gzip_backups: bool = cfg.BooleanField(default=False)
-    tags: Dict[str, int] = cfg.DictField(type=cfg.LogLevelField(),
+    tags: Dict[str, int] = cfg.DictField(type=cfg.LogLevelField(), merge_defaults=True,
         default={
             "discord": "INFO",
             "websockets.protocol": "INFO",

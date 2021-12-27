@@ -35,7 +35,7 @@ def setup_logging(logger, config: KaztronConfig, *, debug=False, console=True):
 
     logger.setLevel(cfg_level)
     _logging_info.cfg_level = cfg_level
-    _logging_info.cfg_packages = cfg_logging.tags  # level overrides for specific packages
+    _logging_info.cfg_packages = dict(cfg_logging.tags)  # level overrides for specific packages
 
     for name, s_value in _logging_info.cfg_packages.items():
         logging.getLogger(name).setLevel(max(s_value, cfg_level))

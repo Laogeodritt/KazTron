@@ -167,7 +167,7 @@ class KazClient(commands.Bot):
         try:
             if self._is_first_load:
                 await self.channel_out.send(
-                    rf"**\*\*\* Bot {self.config.core.name} (KazTron v{kaztron.__version__}) "
+                    rf"**\*\*\* Bot {self.config.root.core.name} (KazTron v{kaztron.__version__}) "
                     rf"is running.**"
                 )
             else:

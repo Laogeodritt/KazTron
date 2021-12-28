@@ -149,12 +149,8 @@ class KazCog(commands.Cog):
 
     @commands.Cog.listener('on_connect')
     async def on_connect_set_status(self):
-        """ Resets the status to INIT (see #316, #317) and clear config caches. """
+        """ Resets the status to INIT (see #316, #317). """
         self._status = CogStatus.INIT
-        if self.config:
-            self.config.clear_cache()
-        if self.state:
-            self.state.clear_cache()
 
     @commands.Cog.listener('on_ready')
     async def _on_ready_init(self):

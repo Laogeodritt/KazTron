@@ -109,10 +109,9 @@ def create_client(config: KaztronConfig, state: KaztronConfig) -> KazClient:    
 
 def load_all_extensions(client: KazClient):
     for name in client.config.get([]).keys():
-        is_enabled = client.config.get((name, 'enable'), default=True)
-        package = client.config.get((name, 'package'), default='kaztron.cog.' + name)
-
         if name not in kaztron.cfg_core_sections:  # section is an extension, not core config
+            is_enabled = client.config.get((name, 'enable'), default=True)
+            package = client.config.get((name, 'package'), default='kaztron.cog.' + name)
             if not is_enabled:
                 logger.warning(f"Skipping disabled extension: '{name}'")
                 continue

@@ -454,6 +454,9 @@ class ListField(ContainerField):
     validate values and can contain mixed primitive types. If the ``type`` attribute is defined as
     any :cls:`Field`, then the list will be converted and validated using that Field object, and
     can only contain compatible values.
+
+    The ``lazy`` attribute of the ``type`` field is ignored. For non-lazy behaviour, set the
+    ``lazy`` attribute to the ListField instance itself.
     """
     max_len: int = None
     min_len: int = 0
@@ -486,6 +489,9 @@ class DictField(ContainerField):
     If ``merge_defaults`` is True, then keys in the ``default`` parameter are merged into the
     config file when reading (they are not written to file unless modified). If False (default),
     then the defaults are only used if this dict is entirely unspecified in the config file.
+
+    The ``lazy`` attribute of the ``type`` field is ignored. For non-lazy behaviour, set the
+    ``lazy`` attribute to the ListField instance itself.
     """
     merge_defaults: bool = False
 

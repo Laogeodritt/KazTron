@@ -40,6 +40,7 @@ def model_fixture() -> ConfigModelFixture:
             'nest': {
                 'bird': 'blue jay',
                 'five': 5,
+                'one_meow': {'a': 1, 'b': 2},
                 'meow': [{'a': 1, 'b': 2}, {'a': 3, 'b': 4}, {'a': 5, 'b': 6}],
                 'list': [0, 2, 4, 6, 8, 10],
                 'dict': {'a': 32, 'b': 33, 'c': 34, 'd': 35},
@@ -61,6 +62,7 @@ def model_fixture() -> ConfigModelFixture:
     class Nest(ConfigModel):
         bird: str = StringField()
         five: int = IntegerField()
+        one_meow: Meow = ConfigModelField(type=Meow)
         meow: List[Meow] = ListField(type=ConfigModelField(type=Meow))
         list: list = ListField(type=IntegerField(max=255))
         dict: dict = DictField(type=IntegerField(max=255))
@@ -90,6 +92,70 @@ def model_fixture() -> ConfigModelFixture:
     f.model_jkl = Jkl
     f.model_asdf = Asdf
     f.model_data = DataRoot
+
+    root = f.model_data(f.mock_config)
+    root.cfg_set_data(f.data)
+    f.object = root
+    return f
+
+
+class ConfigModelAttrFixture:
+    data: dict = None
+    mock_config: Mock = None
+    root: ConfigRoot = None
+    object: 'DataRoot' = None
+    model_data: Type[ConfigRoot] = None
+    model_a: Type[ConfigModel] = None
+    model_b: Type[ConfigModel] = None
+    field: Type[Field] = None
+    type: Type[object] = None
+
+
+@pytest.fixture
+def model_attr_fixture() -> ConfigModelAttrFixture:
+    f = ConfigModelAttrFixture()
+    f.mock_config = Mock(spec=KaztronConfig)
+    f.mock_config.get.return_value = 'value'
+    f.mock_config.filename = 'mock_file.cfg'
+    f.mock_config.read_only = False
+    f.data = {
+        'a': {
+            'b': {
+                'c': 1,
+                'l': [2, 3, 4],
+                'd': {'a': 5, 'b': 6, 'c': 7},
+            }
+        }
+    }
+
+    class Potato:
+        def __init__(self, x: int, t):
+            self.x = x
+            self.testattr_from_field = t
+
+    class PotatoField(Field):
+        def convert(self, value) -> Potato:
+            return Potato(value, self.testattr)
+
+        def serialize(self, value: Potato) -> int:
+            return value.x
+
+    class B(ConfigModel):
+        c: Potato = PotatoField()
+        l: List[Potato] = ListField(type=PotatoField())
+        d: Dict[str, Potato] = DictField(type=PotatoField())
+
+    class A(ConfigModel):
+        b: B = ConfigModelField(type=B)
+
+    class DataRoot(ConfigRoot):
+        a: A = ConfigModelField(type=A)
+
+    f.model_data = DataRoot
+    f.model_a = A
+    f.model_b = B
+    f.field = PotatoField
+    f.type = Potato
 
     root = f.model_data(f.mock_config)
     root.cfg_set_data(f.data)
@@ -316,13 +382,23 @@ class TestConfigModel:
         mock_b.assert_called_once()
         assert mock_c.call_count == 3
 
-    def test_list_child_has_field(self):
-        # check that __config_field__ properly set
-        pass
+    def test_list_child_has_field(self, model_fixture: ConfigModelFixture):  # regression test
+        o = model_fixture.object
+        assert o.jkl.nest.meow[1].__config_field__.type is model_fixture.model_meow
 
-    def test_dict_child_has_field(self):
-        # check that __config_field__ properly set
-        pass
+    def test_dict_child_has_field(self, model_fixture: ConfigModelFixture):  # regression test
+        o = model_fixture.object
+        assert o.jkl.nest.meowmap['y'].__config_field__.type is model_fixture.model_meow
+
+    def test_runtime_attribute_propagation(self, model_attr_fixture: ConfigModelAttrFixture):
+        testattr = object()
+        o = model_attr_fixture.object
+        o.cfg_set_runtime_attributes(model_attr_fixture.field, testattr=testattr)
+        o.clear_cache()
+        for oo in o, o.a, o.a.b:
+            assert oo.cfg_get_runtime_attributes(model_attr_fixture.field)['testattr'] is testattr
+        _ = o.a.b.c
+        assert o.a.b.cfg_get_field('c').testattr is testattr
 
     # TODO: check parent/root with non-lazy eval
 
@@ -459,6 +535,14 @@ class TestConfigList:
         assert el.cfg_path == ('jkl', 'nest', 'meow', 1)
         assert el.cfg_file == 'mock_file.cfg'
 
+    def test_runtime_attribute_propagation(self, model_attr_fixture: ConfigModelAttrFixture):
+        testattr = object()
+        o = model_attr_fixture.object
+        o.cfg_set_runtime_attributes(model_attr_fixture.field, testattr=testattr)
+        o.clear_cache()
+        assert o.a.b.l.cfg_get_runtime_attributes(model_attr_fixture.field)['testattr'] is testattr
+        assert o.a.b.l[1].testattr_from_field is testattr
+
 
 class TestConfigDict:
     def test_hierarchy_properties(self, model_fixture: ConfigModelFixture):
@@ -558,3 +642,11 @@ class TestConfigDict:
         assert d['overwrite'] == 12
         assert len(d) == 3
         assert set(iter(d)) == {'default', 'new', 'overwrite'}
+
+    def test_runtime_attribute_propagation(self, model_attr_fixture: ConfigModelAttrFixture):
+        testattr = object()
+        o = model_attr_fixture.object
+        o.cfg_set_runtime_attributes(model_attr_fixture.field, testattr=testattr)
+        o.clear_cache()
+        assert o.a.b.d.cfg_get_runtime_attributes(model_attr_fixture.field)['testattr'] is testattr
+        assert o.a.b.d['b'].testattr_from_field is testattr

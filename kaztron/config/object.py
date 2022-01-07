@@ -552,12 +552,11 @@ class ConfigList(ConfigNodeMixin, MutableSequence):
     def clear_cache(self):
         """ Clear cache of read objects. If non-lazy, also re-convert all fields."""
         if self._serialized_data is not None:  # allows for clearing data
-            if self.__config_field__.lazy:
-                self._converted = [None] * len(self._serialized_data)
-                self._convert_map = [False] * len(self._serialized_data)
-            else:
-                self._converted = self.__config_field__.convert(self._serialized_data)
-                self._convert_map = [True] * len(self._serialized_data)
+            self._converted = [None] * len(self._serialized_data)
+            self._convert_map = [False] * len(self._serialized_data)
+            if not self.__config_field__.lazy:
+                for _ in self:
+                    pass  # calls __get_item__ to convert each item in list
         else:
             self._converted = None
             self._convert_map = None

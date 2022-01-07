@@ -62,7 +62,7 @@ class GuildChannelField(DiscordModelField):
             errmsg = f"Channel #{value} not found"
 
         if ch is None:
-            if self.must_exist:
+            if self.must_exist and self.client.is_ready():
                 raise ValueError(errmsg)
             else:
                 ch = self._convert_dummy(value)
@@ -135,14 +135,20 @@ class RoleField(DiscordModelField):
     """
 
     def convert(self, value) -> Union[discord.Role, 'DiscordDummy']:
-        if isinstance(value, int):
+        guild = self.client.guild
+        errmsg = 'unknown error'
+
+        if guild is None:
+            role = None
+        elif isinstance(value, int):
             role = self.client.guild.get_role(value)
             errmsg = f'Role ID {value} not found'
         else:
             role = discord.utils.get(self.client.guild.roles, name=value)
             errmsg = f'Role \'{value}\' not found'
+
         if role is None:
-            if self.must_exist:
+            if self.must_exist and guild is not None:
                 raise ValueError(errmsg)
             role = self._convert_dummy(value)
         return role
@@ -160,12 +166,15 @@ class MemberField(DiscordModelField):
 
     def convert(self, value) -> Union[discord.User, 'DiscordDummy']:
         guild = self.client.guild
+
         try:
             member = guild.get_member(value) or guild.get_member_named(value)
-            if member is None:
+        except AttributeError:
+            member = None
+
+        if member is None:
+            if self.must_exist and guild is not None:
                 value_str = str(value) if isinstance(value, int) else f"'{value}'"
                 raise ValueError(f'Member {value_str} not found')
-        except (ValueError, AttributeError):  # AttributeError in case client hasn't been set
-            if self.must_exist:
-                raise
-            return self._convert_dummy(value)
+            member = self._convert_dummy(value)
+        return member

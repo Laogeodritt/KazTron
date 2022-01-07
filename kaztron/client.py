@@ -37,6 +37,7 @@ class KazClient(commands.Bot):
 
         self._config = config
         self._state = client_state
+        self._guild = None
 
         if 'description' not in kwargs:
             # don't use ConfigModel yet
@@ -56,8 +57,8 @@ class KazClient(commands.Bot):
 
         self.setup_config_attributes(self._config)
         self.setup_config_attributes(self._state)
-        self._config.root.cfg_register_model('core', CoreConfig)
-        self._config.root.cfg_register_model('logging', Logging)
+        self._config.root.cfg_register_model('core', CoreConfig, lazy=False)
+        self._config.root.cfg_register_model('logging', Logging, lazy=True)
 
     @property
     def config(self):
@@ -112,10 +113,7 @@ class KazClient(commands.Bot):
         Convenience property to access the bot's primary guild. Kaztron is designed as a single-
         guild bot and does not generally operate well on multiple guilds. If not :meth:`~.is_ready`,
         returns None. """
-        try:
-            return self.channel_out.guild
-        except AttributeError:  # not yet ready
-            return None
+        return self._guild
 
     @property
     def uptime(self) -> datetime.timedelta:
@@ -130,10 +128,12 @@ class KazClient(commands.Bot):
 
     async def on_disconnect(self):
         self.state.write(True)
+        self._guild = None
         logger.info("*** Disconnected.")
 
     async def on_ready(self):
-        pass
+        self.core_config.clear_cache()
+        self._guild = self.channel_out.guild
         # TODO: help
         # set global variables for help parser
         # self.kaz_help_parser.variables['output_channel'] = '#' + self.channel_out.name
@@ -171,7 +171,7 @@ class KazClient(commands.Bot):
                     rf"is running.**"
                 )
             else:
-                await self.channel_out.send(r"**\*\*\*Reconnected.**")
+                await self.channel_out.send(r"**\*\*\* Reconnected.**")
         except discord.HTTPException:
             logger.exception("Error sending startup message to output channel.")
 

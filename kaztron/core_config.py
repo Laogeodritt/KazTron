@@ -56,10 +56,10 @@ class CoreDiscord(cfg.ConfigModel):
     channel_output: discord.TextChannel = cfg.TextChannelField(required=True, lazy=False)
     channel_public: discord.TextChannel = cfg.TextChannelField(required=True, lazy=False)
     channel_issues: discord.TextChannel = cfg.TextChannelField(required=True, lazy=False)
-    mod_roles: List[discord.Role] = cfg.ListField(type=cfg.RoleField(), default=[])
-    admin_roles: List[discord.Role] = cfg.ListField(type=cfg.RoleField(), default=[])
-    mod_channels: List[discord.TextChannel] = cfg.ListField(type=cfg.TextChannelField())
-    admin_channels: List[discord.TextChannel] = cfg.ListField(type=cfg.TextChannelField())
+    mod_roles: List[discord.Role] = cfg.ListField(type=cfg.RoleField(), default=[], lazy=False)
+    admin_roles: List[discord.Role] = cfg.ListField(type=cfg.RoleField(), default=[], lazy=False)
+    mod_channels: List[discord.TextChannel] = cfg.ListField(type=cfg.TextChannelField(), lazy=False)
+    admin_channels: List[discord.TextChannel] = cfg.ListField(type=cfg.TextChannelField(), lazy=False)
     status: List[BotStatus] = cfg.ListField(type=cfg.ConfigModelField(type=BotStatus), default=[])
     status_change_interval: timedelta = cfg.TimeDeltaField(default=timedelta(seconds=0))
 
@@ -71,10 +71,10 @@ class CoreConfig(cfg.ConfigModel):
     manual_url: str = cfg.StringField(required=False, default="")
 
     public_links: List[InfoLink] = \
-        cfg.ListField(type=cfg.ConfigModelField(type=InfoLink), default=[])
+        cfg.ListField(type=cfg.ConfigModelField(type=InfoLink), default=[], lazy=False)
     mod_links: List[InfoLink] = \
-        cfg.ListField(type=cfg.ConfigModelField(type=InfoLink), default=[])
+        cfg.ListField(type=cfg.ConfigModelField(type=InfoLink), default=[], lazy=False)
 
-    formats: CoreFormats = cfg.ConfigModelField(type=CoreFormats)
-    daemon: CoreDaemon = cfg.ConfigModelField(type=CoreDaemon)
-    discord: CoreDiscord = cfg.ConfigModelField(type=CoreDiscord)
+    formats: CoreFormats = cfg.ConfigModelField(type=CoreFormats, lazy=True)
+    daemon: CoreDaemon = cfg.ConfigModelField(type=CoreDaemon, lazy=True)
+    discord: CoreDiscord = cfg.ConfigModelField(type=CoreDiscord, lazy=False)

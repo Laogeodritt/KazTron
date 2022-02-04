@@ -338,9 +338,9 @@ class ConfigModel(ConfigNodeMixin, metaclass=ConfigModelMeta):
         try:
             raw_value = self._data[field.name]
             logger.debug(f"{self!s}: Read key '{field.name}' from file.")
-        except KeyError as e:
+        except KeyError:
             if field.required:
-                raise ConfigKeyError(self.cfg_file, self.cfg_path, field.name) from e
+                raise ConfigKeyError(self.cfg_file, self.cfg_path, field.name) from None
             else:
                 logger.warning(f"{self!s}: Key '{key}' not found, using default.")
                 raw_value = copy(field.default)
@@ -477,6 +477,8 @@ class ConfigRoot(ConfigModel):
         if 'name' not in kwargs:
             kwargs['name'] = key
         kwargs['type'] = model
+        if 'default' not in kwargs:
+            kwargs['default'] = {}
         self.__config_fields__[key] = field = ConfigModelField(**kwargs)
         logger.info(f"ConfigRoot({self.cfg_file}): registered key '{key}' to field {field}")
 

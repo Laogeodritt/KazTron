@@ -297,16 +297,19 @@ class CoreCog(kaztron.KazCog):
         details: Provides detailed version and runtime information on this {{name}} instance.
         """
         em = discord.Embed(color=0x80AAFF, title=self.config.name)
-        em.add_field(name="KazTron Core", value="v{}".format(kaztron.__version__), inline=True)
-        em.add_field(name="discord.py", value="v{}".format(discord.__version__), inline=True)
+        em.add_field(name="KazTron Core", value=f"v{kaztron.__version__}", inline=True)
+        em.add_field(name="discord.py", value=f"v{discord.__version__}", inline=True)
         em.add_field(name="Uptime", value=format_timedelta(self.bot.uptime), inline=True)
 
-        em.add_field(name="Loaded Cogs", value=
-            '\n'.join(name for name in self.bot.cogs_ready) + '\n' +
-            '\n'.join(name + " (std cog)" for name in self.bot.cogs_std)
+        loaded_list = (
+                '\n'.join(name for name in self.bot.cogs_ready) + '\n' +
+                '\n'.join(name + " (std cog)" for name in self.bot.cogs_std)
         )
-        em.add_field(name="Load Error", value='\n'.join(name for name in self.bot.cogs_error))
-        em.add_field(name="Not Loaded", value='\n'.join(name for name in self.bot.cogs_not_ready))
+        error_list      = '\n'.join(name for name in self.bot.cogs_error)
+        not_loaded_list = '\n'.join(name for name in self.bot.cogs_not_ready)
+        em.add_field(name="Loaded Cogs", value=loaded_list or 'None')
+        em.add_field(name="Load Error", value=error_list or 'None')
+        em.add_field(name="Not Loaded", value=not_loaded_list or 'None')
 
         for link in self.merge_info_links(kaztron.bot_links, tuple(), with_manual=True):
             em.add_field(name=link.name, value=f'[{link.name}]({link.url})', inline=True)
@@ -328,7 +331,7 @@ class CoreCog(kaztron.KazCog):
             status) and {{!modinfo}} for mod-specific info links.
         """
         em = EmbedSplitter(color=0x80AAFF, title=self.config.name)
-        em.set_footer(text="Can be customised by mods: `.info add` and `.info rem`.")
+        em.set_footer(text="Moderators, you can customise this list!`.info add` and `.info rem`.")
         links = self.merge_info_links(self.config.public_links, self.state.public_links, True)
         for link in links:
             em.add_field(name=link.name, value=f'[{link.name}]({link.url})', inline=True)
@@ -394,7 +397,8 @@ class CoreCog(kaztron.KazCog):
         description: Provides useful links for moderators and bot operators.
         """
         em = EmbedSplitter(color=0x80AAFF, title=self.config.name)
-        em.set_footer(text="Can be customised by mods: `.info add` and `.info rem`.")
+        em.set_footer(text="Moderators, you can customize this list!"
+                           "`.modinfo add` and `.modinfo rem`.")
         links = self.merge_info_links(self.config.mod_links, self.state.mod_links, False)
         for link in links:
             em.add_field(name=link.name, value=f'[{link.name}]({link.url})', inline=True)
@@ -465,7 +469,7 @@ class CoreCog(kaztron.KazCog):
 
         links = {link.name: link for link in a}
         links.update({link.name: link for link in b})
-        return [links.values()]
+        return list(links.values())
 
     @commands.command(pass_context=True, aliases=['bug'])
     @commands.cooldown(rate=3, per=120)

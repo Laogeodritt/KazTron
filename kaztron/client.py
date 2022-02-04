@@ -152,11 +152,10 @@ class KazClient(commands.Bot):
         await self._send_startup_messages()
 
     async def _send_startup_messages(self):
-        cog_errors = sum(1 for c in self.cogs.values() if c.is_error)
-        if cog_errors == 0:
+        if len(self.cogs_error) == 0:
             logger.info("=== ALL COGS READY ===")
         else:
-            logger.error(f"=== COG READY ERRORS: {cog_errors:d} ===")
+            logger.error(f"=== COG READY ERRORS: {len(self.cogs_error):d} ===")
 
         if self._is_first_load:
             logger.info(f"*** Bot {self.core_config.name} is now ready.")
@@ -181,8 +180,10 @@ class KazClient(commands.Bot):
     async def task_change_status_message(self):
         if self.core_config.discord.status:
             activity_data = random.choice(self.core_config.discord.status)
+            logger.info(f"Setting status to '{activity_data.name}'")
             await self.change_presence(activity=discord.Game(name=activity_data.name))
         else:  # clear the "starting up" message
+            logger.info("No statuses set: clearing startup status")
             await self.change_presence(activity=None)
 
     def all_cogs_ready(self):

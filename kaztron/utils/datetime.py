@@ -83,7 +83,7 @@ def format_datetime(dt: datetime, seconds=False) -> str:
     :param seconds: Whether or not to display seconds (this determines which config format to use).
     :return:
     """
-    format_key = 'datetime_format' if not seconds else 'datetime_seconds_format'
+    format_key = 'datetime' if not seconds else 'datetime_seconds'
     return dt.strftime(_get_config_formats().get(format_key))
 
 

@@ -1,3 +1,4 @@
+import functools
 from typing import Type, Dict, Optional, TYPE_CHECKING
 
 import logging
@@ -7,6 +8,7 @@ import discord
 from discord.ext import commands
 
 from kaztron.config import KaztronConfig, ConfigModel, ConfigRoot
+from kaztron.errors import BotNotReady
 from kaztron.utils import logging as logutils
 
 if TYPE_CHECKING:
@@ -147,6 +149,58 @@ class KazCog(commands.Cog):
         """ Check if the cog encountered an error while processing the ``on_ready`` event. """
         return self._status == CogStatus.ERR_READY
 
+    @classmethod
+    def listener(cls, name=None, ready_only=None):
+        """A decorator that marks a function as a listener.
+
+        This is the cog equivalent of :meth:`.Bot.listen`.
+
+        :param name: The name of the event being listened to. If not provided, it defaults to the
+        function's name.
+        :param ready_only: If True, will only run when the cog is ready. If False, will run no
+        matter the current cog state. If not specified, default is True for most events. For events
+        on_connect, on_shard_connect, on_disconnect, on_shard_disconnect, on_ready, on_shard_ready,
+        on_resumed, on_shard_resumed, on_error, default is False.
+        :raises TypeError: The function is not a coroutine function or a string was not passed as
+        the name.
+        """
+
+        def is_default_ready_only(func):
+            NON_READY_EVENTS = ("on_connect", "on_shard_connect",
+                                "on_disconnect", "on_shard_disconnect",
+                                "on_ready", "on_shard_ready",
+                                "on_resumed", "on_shard_resumed",
+                                "on_error")
+            try:  # see parent listener() method - check if we need to get the "actual" func
+                func.__cog_listener__
+            except AttributeError:
+                func = func.__func__
+
+            # now check the registered listener names for non-ready-only event names
+            for listener_name in func.__cog_listener_names__:
+                if listener_name in NON_READY_EVENTS:
+                    return False
+            else:
+                return True
+
+        def is_ready_listener_decorator(func):
+            @functools.wraps(func)
+            async def wrapper(*args, **kwargs):
+                if not args[0].is_ready:
+                    raise BotNotReady(type(args[0]).__name__)
+                return await func(*args, **kwargs)
+            if ready_only or (ready_only is None and is_default_ready_only(func)):
+                return wrapper
+            else:
+                return func
+
+        parent_listener = super().listener(name)
+
+        if ready_only or ready_only is None:
+            return lambda f: is_ready_listener_decorator(parent_listener(f))
+        else:  # ready_only is false-y but not None
+            return parent_listener
+
     @commands.Cog.listener('on_connect')
     async def on_connect_set_status(self):
         """ Resets the status to INIT (see #316, #317). """
@@ -172,8 +226,10 @@ class KazCog(commands.Cog):
 
     def _on_ready_validate_config(self):
         # clear_cache() also re-converts non-lazy keys, providing a first layer of validation
-        self.config.clear_cache()
-        self.state.clear_cache()
+        if self.config:
+            self.config.clear_cache()
+        if self.state:
+            self.state.clear_cache()
 
     async def on_ready_validate(self):
         """
@@ -213,7 +269,7 @@ class KazCog(commands.Cog):
 
         :param ctx: Context.
         """
-        self._cmd_logger.info("{!s}: {}".format(self, logutils.message_log_str(ctx.message)))
+        self._cmd_logger.info(f"{self.qualified_name}: {logutils.message_log_str(ctx.message)}")
 
     def export_kazhelp_vars(self) -> Dict[str, str]:
         """

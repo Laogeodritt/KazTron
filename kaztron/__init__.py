@@ -1,5 +1,4 @@
 # kaztron
-from collections import OrderedDict
 from .client import KazClient
 from .kazcog import KazCog
 from .scheduler import Scheduler, TaskInstance, task

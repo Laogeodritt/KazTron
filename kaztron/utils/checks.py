@@ -270,7 +270,7 @@ class _RoleCheck(Check, abc.ABC):
     def __call__(self, ctx: commands.Context):
         for role in self.get_roles(ctx):
             if role in ctx.author.roles:
-                logger.info(f"Authorized user {ctx.author.id} via role {role.name}")
+                logger.info(f"Authorized user {ctx.author} {ctx.author.id} via role {role.name}")
                 return True
         raise self.ERR_MAP[self.type]("Command not allowed in channel.", ctx)
 

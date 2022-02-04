@@ -163,7 +163,7 @@ def patch_messageable_send_split():
 
         for content_chunk in content_chunks:
             msg_kwargs = kwargs.copy()
-            msg_kwargs['contents'] = content_chunk
+            msg_kwargs['content'] = content_chunk
             msgs_kwargs.append(msg_kwargs)
 
             # only on first message
@@ -181,6 +181,6 @@ def patch_messageable_send_split():
         msgs_kwargs[-1]['files'] = files
 
         # finally, send all the messages and collect the returned Message objects
-        return tuple(await self.send(**msg_kwargs) for msg_kwargs in msgs_kwargs)
+        return tuple([await self.send(**msg_kwargs) for msg_kwargs in msgs_kwargs])
 
     Messageable.send_split = send_split

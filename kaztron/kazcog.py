@@ -207,6 +207,7 @@ class KazCog(commands.Cog):
         self._status = CogStatus.INIT
 
     @commands.Cog.listener('on_ready')
+    @commands.Cog.listener('on_resume')
     async def _on_ready_init(self):
         try:
             self._on_ready_validate_config()

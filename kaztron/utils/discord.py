@@ -1,5 +1,6 @@
 import re
 from typing import Union, Optional, TYPE_CHECKING
+import functools
 
 import discord
 from discord.ext import commands
@@ -212,7 +213,10 @@ def get_command_str(ctx: commands.Context) -> str:
     # if ctx.subcommand_passed:
     #    cmd_str += " {0.subcommand_passed}".format(ctx)
     # return cmd_str
-    return "{}{}".format(get_command_prefix(ctx), ctx.command.qualified_name)
+    try:
+        return f"{get_command_prefix(ctx)}{ctx.command.qualified_name}"
+    except AttributeError:
+        return ""
 
 
 def get_help_str(ctx: commands.Context) -> str:
@@ -228,7 +232,10 @@ def get_help_str(ctx: commands.Context) -> str:
     #     cmd_str += " {0.subcommand_passed}".format(ctx)
     # return cmd_str
 
-    return "{}help {}".format(get_command_prefix(ctx), ctx.command.qualified_name)
+    try:
+        return f"{get_command_prefix(ctx)}help {ctx.command.qualified_name}"
+    except AttributeError:
+        return f"{get_command_prefix(ctx)}help"
 
 
 def get_usage_str(ctx: commands.Context) -> str:
@@ -259,10 +266,40 @@ def get_usage_str(ctx: commands.Context) -> str:
     return ' '.join(result)
 
 
+def metagroup(*args, **kwargs):
+    """
+    Convenience decorator for a discord.ext.commands.group() that does not itself act as a command,
+    only a container/category for subcommands. If this group is called alone (instead of calling
+    a subcommand), a help message is displayed.
+
+    In addition to the help message, this decorator is syntactic sugar for:
+
+    .. code-block:: html
+        @discord.ext.commands.group(invoke_without_command=True, ignore_extra=True, *args, **kwargs)
+
+    Any arguments passed to ``metagroup`` are passed along to the command group decorator.
+
+    The decorated function can be empty (``pass``). However, if needed, it could also have a body:
+    it will be executed after showing the help message.
+    :param args:
+    :param kwargs:
+    :return:
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(this, ctx: commands.Context, *args, **kwargs):
+            await ctx.reply(get_group_help(ctx))
+            return await func(this, ctx, *args, **kwargs)
+
+        group = commands.group(invoke_without_command=True, ignore_extra=True, *args, **kwargs)
+        return group(wrapper)
+    return decorator
+
+
 def get_group_help(ctx: commands.Context):
-    subcommands = sorted(list(set(ctx.command.commands.values())), key=lambda c: c.name)
+    subcommands = sorted(list(ctx.command.commands), key=lambda c: c.name)
     subcommand_strs = ['|'.join([c.name] + list(c.aliases)) for c in subcommands]
     subcommand_list = ', '.join(subcommand_strs)
-    return ('Invalid sub-command. Valid subcommands are `{0!s}`. '
-            'Use `{1}` or `{1} <subcommand>` for instructions.') \
-        .format(subcommand_list, get_help_str(ctx))
+    return (f"Oops! You need to specify a valid subcommand for the `{get_command_str(ctx)}` group. "
+            f" Valid subcommands are: `{subcommand_list}`. "
+            f"Type `{get_help_str(ctx)}` for more info.")

@@ -1,5 +1,5 @@
 from kaztron import KazCog
-from kaztron.utils.discord import get_group_help
+from kaztron.utils.discord import metagroup
 
 import discord
 from discord.ext import commands
@@ -14,9 +14,9 @@ class TestCoreCog(KazCog):
     def __init__(self, bot):
         super().__init__(bot)
 
-    @commands.group(invoke_without_command=True, ignore_extra=True)
+    @metagroup()
     async def say(self, ctx: Context):
-        get_group_help(ctx)
+        pass
 
     @say.command(name='log')
     async def say_log(self, ctx: Context, *, msg: str):

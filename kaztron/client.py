@@ -129,7 +129,7 @@ class KazClient(commands.Bot):
     async def on_disconnect(self):
         self.state.write(True)
         self._guild = None
-        logger.info("*** Disconnected.")
+        logger.info("*** DISCONNECTED.")
 
     async def on_ready(self):
         self.core_config.clear_cache()

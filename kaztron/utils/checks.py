@@ -66,6 +66,7 @@ class Check(abc.ABC):
 class CheckAny(Check):
     def __init__(self, *checks):
         self.checks = []
+        self.types = set()
         for wrapped in checks:
             try:
                 predicate = wrapped.predicate
@@ -73,6 +74,7 @@ class CheckAny(Check):
                 raise TypeError(f'{wrapped} must be wrapped by commands.check decorator') from None
             else:
                 self.checks.append(predicate)
+                self.types.add(predicate.type)
         super().__init__(CheckType.ANY, self.checks)
 
     async def __call__(self, ctx: commands.Context):
@@ -343,19 +345,6 @@ def _admin_roles():
     return commands.check(_RoleConfigRootCheck('core.discord.admin_roles', CheckType.U_ADMIN))
 
 
-# TODO: keep these messages for check failures in error handler
-# msgs = {  # (single_role, with_mods): msg
-#     (True, True): "You must be a moderator or have the {r} role.",
-#     (True, False): "You must have the {r} role to use that command.",
-#     (False, True): "You must be a moderator or have one of these roles to use that "
-#                    "command: {rl}",
-#     (False, False): "You must have one of these roles to use that command: {rl}"
-# }
-
-# TODO: make use of kt_delete_on_fail in error handler
-# TODO: make use of delete_message in the appropriate place
-
-
 def delete_on_fail():
     """
     Command decorator. If a check fails, delete the command invocation message.
@@ -369,21 +358,27 @@ def delete_on_fail():
 
 def delete_message():
     """ Command decorator. Always delete the command invocation message. """
-    async def delete_invoking_message(ctx: commands.Context):
-        try:
-            await ctx.message.delete()
-        except discord.Forbidden:
-            logger.warning(f"Cannot delete invoking message in #{ctx.channel.name}")
-            await ctx.bot.channel_out.send(
-                "Cannot delete invoking message in "
-                f"{ctx.channel.mention}: {ctx.channel.jump_url}"
-            )
-
     def decorator(cmd):
         if not isinstance(cmd, commands.Command):
             raise ValueError("@delete_on_fail must be above the discord command or group decorator")
 
-        # TODO: can only register one before_invoke - better solutions?
-        cmd.before_invoke(delete_invoking_message)
+        func = cmd.callback
+
+        @functools.wraps(func)
+        async def delete_invoking_message(ctx: commands.Context, *args, **kwargs):
+            try:
+                await ctx.message.delete()
+            except discord.Forbidden:
+                logger.warning(f"Cannot delete invoking message in #{ctx.channel.name}")
+                try:
+                    ch = ctx.channel
+                    await ctx.bot.channel_out.send(
+                        f"Cannot delete invoking message in {ch.mention}: {ch.jump_url}")
+                except discord.DiscordException:
+                    logger.exception("Exception occurred while sending log message.")
+            await func(ctx, *args, **kwargs)
+
+        cmd.callback = delete_invoking_message
+        return cmd
 
     return decorator

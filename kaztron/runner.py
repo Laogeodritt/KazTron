@@ -1,12 +1,13 @@
 import asyncio
 import logging
 import sys
+from typing import Sequence
 
 import discord
 
 import kaztron
 from kaztron import KazClient
-from kaztron.config import get_kaztron_config, KaztronConfig, get_runtime_config
+from kaztron.config import get_kaztron_config, KaztronConfig, get_runtime_config, ConfigKeyError
 from kaztron.discord_patches import apply_patches
 from kaztron.utils.asyncio import all_tasks
 
@@ -33,7 +34,9 @@ def run_kaztron(loop: asyncio.AbstractEventLoop):
     try:
         client = create_client(config, state)
         client.load_extension("kaztron.core")
-        load_all_extensions(client)
+        for name in client.config.get([]).keys():
+            if name not in kaztron.cfg_core_sections:  # section is an extension, not core config
+                load_all_extensions(client, (name,))
     except Exception:
         logger.exception("Uncaught exception during bot setup. Aborting.")
         raise
@@ -107,22 +110,30 @@ def create_client(config: KaztronConfig, state: KaztronConfig) -> KazClient:    
     return client
 
 
-def load_all_extensions(client: KazClient):
-    for name in client.config.get([]).keys():
-        if name not in kaztron.cfg_core_sections:  # section is an extension, not core config
-            is_enabled = client.config.get((name, 'enable'), default=True)
-            package = client.config.get((name, 'package'), default='kaztron.cog.' + name)
-            if not is_enabled:
-                logger.warning(f"Skipping disabled extension: '{name}'")
-                continue
+def load_all_extensions(client: KazClient, cfg_path: Sequence[str]):
+    cfg_path = tuple(cfg_path)
+    cfg_path_str = '.'.join(cfg_path)
+    try:
+        is_enabled = client.config.get(cfg_path + ('extension',))
+        package = client.config.get(cfg_path + ('package',), default='kaztron.cog.' + cfg_path_str)
+    except (ConfigKeyError, TypeError):
+        return  # this is not a subsection and can be silently skipped
 
-            logger.debug(f"Loading extension: '{name}' (package: '{package}')")
-            # noinspection PyBroadException
-            try:
-                client.load_extension(package)
-            except Exception:
-                logger.exception(f"Failed to load extension '{name}'")
-                sys.exit(ErrorCodes.EXTENSION_LOAD)
+    if not is_enabled:
+        logger.warning(f"Skipping disabled extension: '{cfg_path_str}'")
+        return
+
+    logger.debug(f"Loading extension: '{cfg_path_str}' (package: '{package}')")
+    # noinspection PyBroadException
+    try:
+        client.load_extension(package)
+    except Exception:
+        logger.exception(f"Failed to load extension '{cfg_path_str}'")
+        sys.exit(ErrorCodes.EXTENSION_LOAD)
+
+    # try loading any subsections as subpackages
+    for subsection in client.config.get(cfg_path).keys():
+        load_all_extensions(client, cfg_path + (subsection,))
 
 
 def get_daemon_context(config: KaztronConfig):
@@ -133,8 +144,8 @@ def get_daemon_context(config: KaztronConfig):
     from daemon import DaemonContext, pidfile
 
     bot_dir = Path(sys.modules['__main__'].__file__).resolve().parent
-    pid = pidfile.TimeoutPIDLockFile(config.get('core', 'daemon', 'pidfile'), "pid.lock")
-    daemon_log = open(config.get('core', 'daemon', 'log'), 'w+')
+    pid = pidfile.TimeoutPIDLockFile(config.get(('core', 'daemon', 'pidfile')), "pid.lock")
+    daemon_log = open(config.get(('core', 'daemon', 'log')), 'w+')
     daemon_context = DaemonContext(
         working_directory=str(bot_dir),
         umask=0o002,

@@ -1,5 +1,5 @@
 import functools
-from typing import Type, Dict, Optional, TYPE_CHECKING
+from typing import Type, Dict, List, Tuple, Optional, TYPE_CHECKING
 
 import logging
 from enum import Enum
@@ -165,15 +165,37 @@ class KazCog(commands.Cog):
         the name.
         """
 
-        def is_default_ready_only(func):
+        # KazCog.listener() adds two features:
+        # - An on_ready check, which can be enabled/disabled explicitly or auto-enabled depending
+        #   on the event type.
+        # - Capture of on_ready and on_resume events to ensure that errors raised will be reflected
+        #   in the cog's lifecycle status.
+
+        parent_listener = super().listener(name)
+        ready_only_decorator = cls._ready_only_event(autodetect=(ready_only is None))
+        ready_patch = cls._patch_on_ready_events
+
+        if ready_only or ready_only is None:
+            return lambda f: ready_patch(ready_only_decorator(parent_listener(f)))
+        else:  # not a ready_only event
+            return parent_listener
+
+    @classmethod
+    def _ready_only_event(cls, autodetect):
+        """
+        Decorator to filter event listener based on whether the cog is ready.
+        :param autodetect: If True, will check the event name to determine whether the event should
+            be filtered by cog readiness or not.
+        """
+
+        def autodetect_ready_only(func):
             NON_READY_EVENTS = ("on_connect", "on_shard_connect",
                                 "on_disconnect", "on_shard_disconnect",
                                 "on_ready", "on_shard_ready",
                                 "on_resumed", "on_shard_resumed",
                                 "on_error")
-            try:  # see parent listener() method - check if we need to get the "actual" func
-                func.__cog_listener__
-            except AttributeError:
+            # check if we need to unwrap a staticmethod - see discord.Cog.listener()
+            if isinstance(func, staticmethod):
                 func = func.__func__
 
             # now check the registered listener names for non-ready-only event names
@@ -183,23 +205,37 @@ class KazCog(commands.Cog):
             else:
                 return True
 
-        def is_ready_listener_decorator(func):
+        def decorator(func):
             @functools.wraps(func)
             async def wrapper(*args, **kwargs):
                 if not args[0].is_ready:
                     raise BotNotReady(type(args[0]).__name__)
                 return await func(*args, **kwargs)
-            if ready_only or (ready_only is None and is_default_ready_only(func)):
+            if (not autodetect) or (autodetect and autodetect_ready_only(func)):
                 return wrapper
             else:
                 return func
+        return decorator
 
-        parent_listener = super().listener(name)
-
-        if ready_only or ready_only is None:
-            return lambda f: is_ready_listener_decorator(parent_listener(f))
-        else:  # ready_only is false-y but not None
-            return parent_listener
+    @classmethod
+    def _patch_on_ready_events(cls, func):
+        """
+        Removes on_ready/on_resume events from the listener list and registers them separately for
+        KazCog-specific lifecycle management. This method must run BEFORE the discord.py Cog
+        metaclass's __new__ method runs. Effectively, this means it is best applied as a decorator.
+        """
+        actual_func = func
+        if isinstance(func, staticmethod):
+            actual_func = func.__func__
+        if actual_func.__cog_listener__:
+            for event_name in ('on_ready', 'on_resume'):
+                if event_name in actual_func.__cog_listener_names__:
+                    try:
+                        actual_func.__kazcog_listener_names__.append(event_name)
+                    except AttributeError:
+                        actual_func.__kazcog_listener_names__ = [event_name]
+                    actual_func.__cog_listener_names__.remove(event_name)
+        return func
 
     @commands.Cog.listener('on_connect')
     async def on_connect_set_status(self):
@@ -207,17 +243,30 @@ class KazCog(commands.Cog):
         self._status = CogStatus.INIT
 
     @commands.Cog.listener('on_ready')
-    @commands.Cog.listener('on_resume')
     async def _on_ready_init(self):
+        await self._on_ready_init_inner('on_ready')
+
+    @commands.Cog.listener('on_resume')
+    async def _on_resume_init(self):
+        await self._on_ready_init_inner('on_resume')
+
+    async def _on_ready_init_inner(self, event: str):
+        logger.debug(event)
         try:
             self._on_ready_validate_config()
-            await self.on_ready_validate()
-        except Exception as e:
+            for attr_name in dir(self):  # find and execute any on_ready/on_resume events in cog
+                if attr_name.startswith('__') or attr_name.endswith('__'):
+                    continue
+                func = getattr(self, attr_name)
+                if not callable(func) or not hasattr(func, '__kazcog_listener_names__'):
+                    continue
+                if event in func.__kazcog_listener_names__:
+                    await func()
+        except Exception:
             self._status = CogStatus.ERR_READY
-            logger.exception("Error in on_ready event: validation error")
-            await self.bot.channel_out.send("[ERROR] Error loading cog {}: {}".format(
-                self.qualified_name, logutils.exc_msg_str(e)
-            ))
+            await self.bot.channel_out.send(
+                f"[ERROR] Cog {self.qualified_name} failed to load ({event})")
+            # no logger: error handler will handler that part
             raise
         else:
             self._status = CogStatus.READY
@@ -228,29 +277,11 @@ class KazCog(commands.Cog):
     def _on_ready_validate_config(self):
         # clear_cache() also re-converts non-lazy keys, providing a first layer of validation
         if self.config:
+            logger.debug(f"{self.qualified_name}: clearing config cache...")
             self.config.clear_cache()
         if self.state:
+            logger.debug(f"{self.qualified_name}: clearing config-state cache...")
             self.state.clear_cache()
-
-    async def on_ready_validate(self):
-        """
-        This method does any needed initialisation and validation of the cog at ``on_ready`` time.
-        It should be overridden by subclasses needing to do such validation.
-
-        If init/validation fails, this method must raise an exception. This signals to the cog to
-        remain in a disabled state.
-
-        In the case that initialisation steps need to be taken at ``on_ready`` time and failure of
-        these steps is unlikely or are not critical to the cog's operation, it may be preferable
-        to define an ``on_ready`` listener instead.
-
-        KazCog will, by default, always FIRST test all keys in the :attr:`config` and :attr:`state`
-        ConfigModels (non-recursively, but recursive testing can be achieved by setting the
-        ``lazy`` parameter to each Field), and considers validation to have failed if a converter
-        raises an error. It is not necessary to test these. However, further validation of the
-        config/state, beyond the Field.convert() validation, can be performed.
-        """
-        pass
 
     @commands.Cog.listener('on_disconnect')
     async def on_disconnect_cleanup_cog_state(self):

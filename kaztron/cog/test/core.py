@@ -31,7 +31,7 @@ class TestCoreCog(KazCog):
         await ctx.channel.send_split('This is a long message. '*90)
 
     @KazCog.listener(ready_only=True)
-    async def on_voice_state_update(self, ctx: Context,
+    async def on_voice_state_update(self, member: discord.Member,
                                     before: discord.VoiceState, after: discord.VoiceState):
         await self.bot.channel_out.send("Received voice state event update (test event pass)")
 

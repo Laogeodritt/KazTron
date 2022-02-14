@@ -96,7 +96,7 @@ class ErrorHandlerCog(ErrorHandler, KazCog):
         elif exc_info[0] is asyncio.CancelledError:  # scheduler events, usually
             raise exc_info[1]
         elif exc_info[0] is BotNotReady:
-            logger.warning("Event {} called before on_ready: ignoring".format(event))
+            logger.warning(f"{exc_info[1].args[0]}: Event {event} called before on_ready: ignoring")
             return
 
         # global logging of error
